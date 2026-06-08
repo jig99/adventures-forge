@@ -818,12 +818,21 @@ function StepClass({ c, update }) {
 
 function StepAbilities({ c, update }) {
   const method = c.scoreMethod;
+  const blank = { str: null, dex: null, con: null, int: null, wis: null, cha: null };
   const setMethod = (m) => {
-    const blank = { str: null, dex: null, con: null, int: null, wis: null, cha: null };
     if (m === "array") update({ scoreMethod: m, pool: [...STANDARD_ARRAY], baseScores: blank });
+    else if (m === "custom") update({ scoreMethod: m, pool: (c.pool && c.pool.length === 6 ? c.pool : [15, 14, 13, 12, 10, 8]), baseScores: blank });
     else if (m === "pointbuy") update({ scoreMethod: m, baseScores: { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 } });
-    else update({ scoreMethod: m, pool: [], baseScores: blank });
+    else update({ scoreMethod: m, pool: [], baseScores: blank }); // roll
   };
+
+  const setCustomVal = (i, raw) => {
+    const next = [...(c.pool || [15, 14, 13, 12, 10, 8])];
+    if (raw === "") next[i] = "";
+    else { const n = Math.max(1, Math.min(30, parseInt(raw, 10))); next[i] = Number.isNaN(n) ? "" : n; }
+    update({ pool: next, baseScores: blank });
+  };
+  const customPool = (c.pool || []).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
 
   const pbSpent = method === "pointbuy"
     ? ABILITIES.reduce((sum, a) => sum + (POINT_BUY_COST[c.baseScores[a.key]] ?? 0), 0) : 0;
@@ -835,7 +844,7 @@ function StepAbilities({ c, update }) {
     <div className="step">
       <StepHead n="4" title="Set Ability Scores" sub="Higher is better. The number in (parentheses) is the modifier you'll add to rolls." />
       <div className="method-row">
-        {[["array", "Standard Array", "Balanced & fast"], ["pointbuy", "Point Buy", "Customize, 27 pts"], ["roll", "Roll Dice", "Roll then place"]].map(([m, t, s]) => (
+        {[["array", "Standard Array", "Balanced & fast"], ["custom", "Custom Array", "Your own six"], ["pointbuy", "Point Buy", "Customize, 27 pts"], ["roll", "Roll Dice", "Roll then place"]].map(([m, t, s]) => (
           <button key={m} className={"method" + (method === m ? " on" : "")} onClick={() => setMethod(m)}>
             <b>{t}</b><span>{s}</span>
           </button>
@@ -850,6 +859,19 @@ function StepAbilities({ c, update }) {
       {method === "array" && (
         <div className="pool-show center">Assign these to your abilities: <b>{STANDARD_ARRAY.join(", ")}</b></div>
       )}
+      {method === "custom" && (
+        <div className="custom-array">
+          <div className="custom-array-label">Enter your six numbers (your DM's homebrew array), then place them below:</div>
+          <div className="custom-inputs">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <input key={i} type="number" min="1" max="30" className="custom-num"
+                value={c.pool && c.pool[i] != null ? c.pool[i] : ""}
+                onChange={(e) => setCustomVal(i, e.target.value)} />
+            ))}
+          </div>
+          <div className="assign-hint">{customPool.length < 6 ? `Fill in all six numbers (${customPool.length}/6).` : "Now place each number wherever you like ↓"}</div>
+        </div>
+      )}
 
       {method === "roll" && !rollPoolReady && <DiceRoller c={c} update={update} />}
 
@@ -863,9 +885,10 @@ function StepAbilities({ c, update }) {
 
       {method === "pointbuy" && <PointBuyGrid c={c} update={update} pbLeft={pbLeft} />}
       {method === "array" && <AssignGrid c={c} update={update} pool={STANDARD_ARRAY} />}
+      {method === "custom" && <AssignGrid c={c} update={update} pool={customPool} />}
       {method === "roll" && rollPoolReady && <AssignGrid c={c} update={update} pool={c.pool} />}
 
-      {(method === "array" || rollPoolReady || method === "pointbuy") && (
+      {(method === "array" || method === "custom" || rollPoolReady || method === "pointbuy") && (
         <p className="tiny-note">Tip: put your highest score in your class's main ability —
           {CLASSES[c.class] ? " " + CLASSES[c.class].primary.map((p) => ABILITIES.find((a) => a.key === p).name).join(" or ") + " for a " + CLASSES[c.class].name + "." : " choose a class first to see which one."}</p>
       )}
@@ -1582,6 +1605,11 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .pool-show { color:var(--ink-soft); font-size:15px; }
 .pool-show.center { text-align:center; display:block; margin-bottom:14px; }
 .assign-hint { font-size:13px; font-style:italic; color:var(--green); margin-top:4px; }
+.custom-array { text-align:center; margin-bottom:16px; }
+.custom-array-label { font-size:15px; color:var(--ink-soft); margin-bottom:10px; }
+.custom-inputs { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.custom-num { width:62px; text-align:center; font-family:'Cinzel',serif; font-size:18px; padding:8px 4px; }
+.custom-num::-webkit-outer-spin-button, .custom-num::-webkit-inner-spin-button { opacity:1; }
 .pool-chips { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
 .pool-chip { font-family:'Cinzel',serif; font-size:18px; color:var(--oxblood);
   width:46px; height:46px; display:grid; place-items:center; border-radius:10px;
