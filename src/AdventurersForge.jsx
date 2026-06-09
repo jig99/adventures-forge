@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
- 
+
 /* ============================ GAME DATA (SRD 5.1 mechanics) ============================ */
- 
+
 const ABILITIES = [
   { key: "str", name: "Strength", short: "STR", desc: "Raw physical power. Melee attacks, lifting, Athletics." },
   { key: "dex", name: "Dexterity", short: "DEX", desc: "Agility & reflexes. Armor Class, initiative, ranged attacks, Stealth." },
@@ -10,7 +10,7 @@ const ABILITIES = [
   { key: "wis", name: "Wisdom", short: "WIS", desc: "Awareness & insight. Perception, cleric/druid spells." },
   { key: "cha", name: "Charisma", short: "CHA", desc: "Force of personality. Persuasion, bard/sorcerer/warlock spells." },
 ];
- 
+
 const SKILLS = [
   { key: "acrobatics", name: "Acrobatics", ability: "dex" },
   { key: "animal", name: "Animal Handling", ability: "wis" },
@@ -32,7 +32,7 @@ const SKILLS = [
   { key: "survival", name: "Survival", ability: "wis" },
 ];
 const SKILL_BY_KEY = Object.fromEntries(SKILLS.map((s) => [s.key, s]));
- 
+
 const RACES = {
   human: {
     name: "Human", speed: 30, bonus: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 },
@@ -96,7 +96,7 @@ const RACES = {
     traits: ["Darkvision", "Fire resistance", "Thaumaturgy cantrip + innate spells"],
   },
 };
- 
+
 const CLASSES = {
   barbarian: { name: "Barbarian", hd: 12, primary: ["str"], saves: ["str", "con"], skillCount: 2,
     skills: ["animal", "athletics", "intimidation", "nature", "perception", "survival"],
@@ -135,7 +135,7 @@ const CLASSES = {
     skills: ["arcana", "history", "insight", "investigation", "medicine", "religion"],
     blurb: "The deepest spellbook in the game. Squishy, but unmatched versatility and control." },
 };
- 
+
 const BACKGROUNDS = {
   acolyte: { name: "Acolyte", skills: ["insight", "religion"], blurb: "You served in a temple. Trained in faith and the rituals of the divine." },
   criminal: { name: "Criminal", skills: ["deception", "stealth"], blurb: "You lived outside the law, with contacts in the underworld." },
@@ -148,7 +148,7 @@ const BACKGROUNDS = {
   outlander: { name: "Outlander", skills: ["athletics", "survival"], blurb: "Raised in the wilds, far from cities and their soft comforts." },
   urchin: { name: "Urchin", skills: ["sleight", "stealth"], blurb: "You grew up on the streets and learned to survive on nothing." },
 };
- 
+
 // Sensible default level-1 starting kits (one common option per class).
 const CLASS_EQUIPMENT = {
   barbarian: ["Greataxe", "Two handaxes", "Four javelins", "Explorer's pack"],
@@ -179,11 +179,11 @@ const BACKGROUND_EQUIPMENT = {
 function defaultEquipment(c) {
   return [...(CLASS_EQUIPMENT[c.class] || []), ...(BACKGROUND_EQUIPMENT[c.background] || [])];
 }
- 
+
 // Classes that actually cast spells at level 1 (Paladins & Rangers don't until level 2).
 const CASTERS = { bard: "cha", cleric: "wis", druid: "wis", sorcerer: "cha", warlock: "cha", wizard: "int" };
 const isCaster = (cls) => !!CASTERS[cls];
- 
+
 // A curated set of SRD spells (cantrips + levels 1-3), tagged by class.
 const SPELLS = [
   // Cantrips (level 0)
@@ -244,9 +244,9 @@ const SPELLS = [
   { name: "Call Lightning", level: 3, classes: ["druid"], time: "1 action", comp: "V, S", effect: "Summon bolts from a storm cloud." },
 ];
 const SPELL_LEVEL_NAMES = { 0: "Cantrips", 1: "1st Level", 2: "2nd Level", 3: "3rd Level" };
- 
+
 const WEAPON_DICE = ["1d4", "1d6", "1d8", "1d10", "1d12", "2d6"];
- 
+
 // Recognized weapons for auto-detecting attacks from the inventory.
 // ability: "str", "dex" (ranged), or "finesse" (auto-picks the higher of STR/DEX).
 // Ordered so multi-word/specific names match before generic ones.
@@ -281,7 +281,7 @@ const WEAPON_DB = [
   { key: "sling", name: "Sling", dice: "1d4", ability: "dex" },
   { key: "staff", name: "Quarterstaff", dice: "1d6", ability: "str" },
 ];
- 
+
 function deriveWeapons(c) {
   const eq = c.equipment || [];
   const strMod = mod(finalScore(c, "str"));
@@ -301,19 +301,19 @@ function deriveWeapons(c) {
   });
   return out;
 }
- 
+
 const ALIGNMENTS = [
   "Lawful Good", "Neutral Good", "Chaotic Good",
   "Lawful Neutral", "True Neutral", "Chaotic Neutral",
   "Lawful Evil", "Neutral Evil", "Chaotic Evil",
 ];
- 
+
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 const POINT_BUY_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
 const PROF_BONUS = 2; // level 1
- 
+
 /* ============================ HELPERS ============================ */
- 
+
 const mod = (score) => Math.floor((score - 10) / 2);
 const fmt = (n) => (n >= 0 ? "+" : "") + n;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -321,7 +321,7 @@ const roll4d6 = () => {
   const r = [0, 0, 0, 0].map(() => 1 + Math.floor(Math.random() * 6)).sort((a, b) => b - a);
   return r[0] + r[1] + r[2];
 };
- 
+
 function racialBonus(c) {
   const out = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
   const race = RACES[c.race];
@@ -358,13 +358,13 @@ function blankChar() {
     class: "", background: "", alignment: "", scoreMethod: "array",
     baseScores: { str: null, dex: null, con: null, int: null, wis: null, cha: null },
     pool: [...STANDARD_ARRAY], classSkills: [], acOverride: "", notes: "",
-    equipment: [], equipmentLoaded: false, weapons: [], spells: [],
+    equipment: [], equipmentLoaded: false, weapons: [], spells: [], photo: "",
     level: 1, createdAt: Date.now(),
   };
 }
- 
+
 /* ============================ APP ============================ */
- 
+
 export default function App() {
   const [roster, setRoster] = useState([]);
   const [view, setView] = useState("home"); // home | learn | build | sheet
@@ -373,7 +373,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [raceImages, setRaceImages] = useState({}); // { raceKey: dataURL } — session photos for the selector
- 
+
   useEffect(() => {
     (async () => {
       try {
@@ -387,7 +387,7 @@ export default function App() {
       setLoaded(true);
     })();
   }, []);
- 
+
   const setRaceImage = (key, dataUrl) => {
     setRaceImages((prev) => {
       const next = { ...prev };
@@ -396,7 +396,7 @@ export default function App() {
       return next;
     });
   };
- 
+
   useEffect(() => {
     if (!loaded) return;
     setSaveState("saving");
@@ -407,11 +407,11 @@ export default function App() {
     }, 350);
     return () => clearTimeout(t);
   }, [roster, loaded]);
- 
+
   const current = roster.find((c) => c.id === currentId) || null;
   const update = (patch) =>
     setRoster((r) => r.map((c) => (c.id === currentId ? { ...c, ...patch } : c)));
- 
+
   const startNew = () => {
     const c = blankChar();
     setRoster((r) => [...r, c]);
@@ -422,7 +422,7 @@ export default function App() {
   const editChar = (id) => { setCurrentId(id); setStep(0); setView("build"); };
   const viewSheet = (id) => { setCurrentId(id); setView("sheet"); };
   const deleteChar = (id) => setRoster((r) => r.filter((c) => c.id !== id));
- 
+
   return (
     <>
       <style>{CSS}</style>
@@ -441,7 +441,7 @@ export default function App() {
             </div>
           </header>
         )}
- 
+
         {!loaded && <div className="loading">Unrolling the scrolls…</div>}
         {loaded && view === "home" && (
           <Home roster={roster} onNew={startNew} onLearn={() => setView("learn")}
@@ -454,15 +454,15 @@ export default function App() {
             onHome={() => setView("home")} onFinish={() => viewSheet(current.id)} />
         )}
         {loaded && view === "sheet" && current && (
-          <Sheet c={current} onBack={() => setView("home")} onEdit={() => editChar(current.id)} />
+          <Sheet c={current} update={update} onBack={() => setView("home")} onEdit={() => editChar(current.id)} />
         )}
       </div>
     </>
   );
 }
- 
+
 /* ============================ HOME / ROSTER ============================ */
- 
+
 function Home({ roster, onNew, onLearn, onEdit, onSheet, onDelete }) {
   return (
     <div className="page fade-in">
@@ -478,12 +478,12 @@ function Home({ roster, onNew, onLearn, onEdit, onSheet, onDelete }) {
           <button className="btn btn-primary" onClick={onNew}>＋ Create a Character</button>
         </div>
       </div>
- 
+
       <div className="section-head">
         <span>Your Party</span>
         <i />
       </div>
- 
+
       {roster.length === 0 ? (
         <div className="empty">No characters yet. Press <b>Create a Character</b> to begin your tale.</div>
       ) : (
@@ -496,7 +496,7 @@ function Home({ roster, onNew, onLearn, onEdit, onSheet, onDelete }) {
     </div>
   );
 }
- 
+
 function CharCard({ c, onSheet, onEdit, onDelete }) {
   const [confirming, setConfirming] = useState(false);
   const race = RACES[c.race];
@@ -526,9 +526,9 @@ function CharCard({ c, onSheet, onEdit, onDelete }) {
     </div>
   );
 }
- 
+
 /* ============================ LEARN ============================ */
- 
+
 // Tiny race/class emblems for the Learn page (inline SVG; no external images).
 const RACE_ICONS = {
   human: `<circle cx="12" cy="8.3" r="4.3" fill="#2c2014"/><path d="M4.8 21c0-4.3 3.3-7 7.2-7s7.2 2.7 7.2 7z" fill="#2c2014"/>`,
@@ -562,13 +562,13 @@ function MiniIcon({ type, kind, className = "mini-icon" }) {
       dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">${inner}</svg>` }} />
   );
 }
- 
+
 // Shows the user's loaded photo for a race, or the drawn emblem as a fallback.
 function RacePortrait({ kind, img, artClass = "race-portrait-art" }) {
   if (img) return <img className="race-photo" src={img} alt="" />;
   return <MiniIcon type="race" kind={kind} className={artClass} />;
 }
- 
+
 // File picker that loads a local image into a race slot for this session.
 function RaceUpload({ kind, img, setRaceImage, label }) {
   const ref = useRef(null);
@@ -590,7 +590,7 @@ function RaceUpload({ kind, img, setRaceImage, label }) {
     </span>
   );
 }
- 
+
 function Learn({ onBack, onStart, raceImages = {}, setRaceImage }) {
   const lessons = [
     { n: 1, art: "race", t: "Choose a Race", d: "Your race (or species) is your character's heritage. It sets your speed, size, special traits, and gives bonuses to ability scores. Want a tank? Dwarves and half-orcs add Constitution and Strength. Want to be sneaky or a caster? Elves boost Dexterity, gnomes boost Intelligence.",
@@ -674,7 +674,7 @@ function Learn({ onBack, onStart, raceImages = {}, setRaceImage }) {
     </div>
   );
 }
- 
+
 // Hand-drawn SVG emblems for the learn section (no external images; copyright-clean).
 function LessonArt({ kind }) {
   const common = { width: "100%", height: "100%", viewBox: "0 0 100 100", xmlns: "http://www.w3.org/2000/svg" };
@@ -758,9 +758,9 @@ function LessonArt({ kind }) {
     </svg>
   );
 }
- 
+
 /* ============================ BUILDER ============================ */
- 
+
 function Builder({ c, update, step, setStep, onHome, onFinish, raceImages, setRaceImage }) {
   const steps = [
     { key: "identity", label: "Identity" },
@@ -777,10 +777,10 @@ function Builder({ c, update, step, setStep, onHome, onFinish, raceImages, setRa
   const cur = steps[safeStep];
   const num = safeStep + 1;
   const go = (n) => setStep(Math.max(0, Math.min(steps.length - 1, n)));
- 
+
   // If the class changes and removes/adds the Spells step, keep the index in range.
   useEffect(() => { if (step > steps.length - 1) setStep(steps.length - 1); }, [steps.length]); // eslint-disable-line
- 
+
   return (
     <div className="page fade-in">
       <div className="builder-top no-print">
@@ -795,7 +795,7 @@ function Builder({ c, update, step, setStep, onHome, onFinish, raceImages, setRa
           ))}
         </div>
       </div>
- 
+
       <div className="builder-stage">
         {cur.key === "identity" && <StepIdentity c={c} update={update} num={num} />}
         {cur.key === "race" && <StepRace c={c} update={update} raceImages={raceImages} setRaceImage={setRaceImage} num={num} />}
@@ -807,7 +807,7 @@ function Builder({ c, update, step, setStep, onHome, onFinish, raceImages, setRa
         {cur.key === "spells" && <StepSpells c={c} update={update} num={num} />}
         {cur.key === "review" && <StepReview c={c} num={num} />}
       </div>
- 
+
       <div className="builder-nav no-print">
         <button className="btn btn-ghost" disabled={safeStep === 0} onClick={() => go(safeStep - 1)}>‹ Back</button>
         {safeStep < steps.length - 1 ? (
@@ -819,7 +819,7 @@ function Builder({ c, update, step, setStep, onHome, onFinish, raceImages, setRa
     </div>
   );
 }
- 
+
 function StepIdentity({ c, update, num }) {
   return (
     <div className="step">
@@ -844,7 +844,7 @@ function StepIdentity({ c, update, num }) {
     </div>
   );
 }
- 
+
 function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
   const race = RACES[c.race];
   const pick = (key) => update({ race: key, subrace: "", halfElf: ["", ""] });
@@ -870,14 +870,14 @@ function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
           </button>
         ))}
       </div>
- 
+
       {setRaceImage && (
         <p className="tiny-note">
           Want pictures here? Use <b>Learn the Basics → Choose a Race</b> to load a photo for each race,
           {race ? <> or set one for {race.name} now: <RaceUpload kind={c.race} img={raceImages[c.race]} setRaceImage={setRaceImage} /></> : " then come back."}
         </p>
       )}
- 
+
       {race && race.subraces && (
         <div className="subpanel">
           <div className="subpanel-label">Choose a {race.name} subrace:</div>
@@ -891,7 +891,7 @@ function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
           </div>
         </div>
       )}
- 
+
       {race && race.choose2 && (
         <div className="subpanel">
           <div className="subpanel-label">Half-Elf: pick two abilities to gain +1 each:</div>
@@ -910,7 +910,7 @@ function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
           </div>
         </div>
       )}
- 
+
       {race && (
         <div className="info-box">
           <div className="info-title">{race.name} traits</div>
@@ -923,7 +923,7 @@ function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
     </div>
   );
 }
- 
+
 function StepClass({ c, update, num }) {
   return (
     <div className="step">
@@ -954,7 +954,7 @@ function StepClass({ c, update, num }) {
     </div>
   );
 }
- 
+
 function StepAbilities({ c, update, num }) {
   const method = c.scoreMethod;
   const blank = { str: null, dex: null, con: null, int: null, wis: null, cha: null };
@@ -964,7 +964,7 @@ function StepAbilities({ c, update, num }) {
     else if (m === "pointbuy") update({ scoreMethod: m, baseScores: { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 } });
     else update({ scoreMethod: m, pool: [], baseScores: blank }); // roll
   };
- 
+
   const setCustomVal = (i, raw) => {
     const next = [...(c.pool || [15, 14, 13, 12, 10, 8])];
     if (raw === "") next[i] = "";
@@ -972,13 +972,13 @@ function StepAbilities({ c, update, num }) {
     update({ pool: next, baseScores: blank });
   };
   const customPool = (c.pool || []).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
- 
+
   const pbSpent = method === "pointbuy"
     ? ABILITIES.reduce((sum, a) => sum + (POINT_BUY_COST[c.baseScores[a.key]] ?? 0), 0) : 0;
   const pbLeft = 27 - pbSpent;
- 
+
   const rollPoolReady = method === "roll" && (c.pool || []).length >= 6;
- 
+
   return (
     <div className="step">
       <StepHead n={num} title="Set Ability Scores" sub="Higher is better. The number in (parentheses) is the modifier you'll add to rolls." />
@@ -989,7 +989,7 @@ function StepAbilities({ c, update, num }) {
           </button>
         ))}
       </div>
- 
+
       {method === "pointbuy" && (
         <div className={"points-left" + (pbLeft < 0 ? " over" : "")}>
           Points remaining: <b>{pbLeft}</b> / 27 {pbLeft < 0 && "— too many!"}
@@ -1011,9 +1011,9 @@ function StepAbilities({ c, update, num }) {
           <div className="assign-hint">{customPool.length < 6 ? `Fill in all six numbers (${customPool.length}/6).` : "Now place each number wherever you like ↓"}</div>
         </div>
       )}
- 
+
       {method === "roll" && !rollPoolReady && <DiceRoller c={c} update={update} />}
- 
+
       {method === "roll" && rollPoolReady && (
         <div className="pool-show center">
           Your rolled scores: <b>{[...c.pool].sort((a, b) => b - a).join(", ")}</b>
@@ -1021,12 +1021,12 @@ function StepAbilities({ c, update, num }) {
           <div className="assign-hint">Now place each number wherever you like ↓</div>
         </div>
       )}
- 
+
       {method === "pointbuy" && <PointBuyGrid c={c} update={update} pbLeft={pbLeft} />}
       {method === "array" && <AssignGrid c={c} update={update} pool={STANDARD_ARRAY} />}
       {method === "custom" && <AssignGrid c={c} update={update} pool={customPool} />}
       {method === "roll" && rollPoolReady && <AssignGrid c={c} update={update} pool={c.pool} />}
- 
+
       {(method === "array" || method === "custom" || rollPoolReady || method === "pointbuy") && (
         <p className="tiny-note">Tip: put your highest score in your class's main ability —
           {CLASSES[c.class] ? " " + CLASSES[c.class].primary.map((p) => ABILITIES.find((a) => a.key === p).name).join(" or ") + " for a " + CLASSES[c.class].name + "." : " choose a class first to see which one."}</p>
@@ -1034,7 +1034,7 @@ function StepAbilities({ c, update, num }) {
     </div>
   );
 }
- 
+
 // Shared assignment grid: drop each pooled number onto an ability of your choice.
 function AssignGrid({ c, update, pool }) {
   const availFor = (key) => {
@@ -1076,7 +1076,7 @@ function AssignGrid({ c, update, pool }) {
     </div>
   );
 }
- 
+
 function PointBuyGrid({ c, update, pbLeft }) {
   return (
     <div className="ability-grid">
@@ -1112,7 +1112,7 @@ function PointBuyGrid({ c, update, pbLeft }) {
     </div>
   );
 }
- 
+
 const PIP_MAP = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 function Die({ value, dropped, rolling }) {
   const pips = PIP_MAP[value] || [];
@@ -1124,19 +1124,19 @@ function Die({ value, dropped, rolling }) {
     </div>
   );
 }
- 
+
 function DiceRoller({ c, update }) {
   const pool = c.pool || [];
   const remaining = 6 - pool.length;
- 
+
   const [dice, setDice] = useState([6, 6, 6, 6]);
   const [phase, setPhase] = useState("idle"); // idle | rolling | settled
   const [dropIdx, setDropIdx] = useState(-1);
   const [lastTotal, setLastTotal] = useState(null);
   const ivRef = useRef(null);
- 
+
   useEffect(() => () => clearInterval(ivRef.current), []);
- 
+
   const doRoll = () => {
     if (remaining <= 0) return;
     clearInterval(ivRef.current);
@@ -1155,7 +1155,7 @@ function DiceRoller({ c, update }) {
       }
     }, 60);
   };
- 
+
   const rollRest = () => {
     clearInterval(ivRef.current);
     const more = [];
@@ -1163,7 +1163,7 @@ function DiceRoller({ c, update }) {
     update({ pool: [...pool, ...more] });
     setPhase("idle");
   };
- 
+
   return (
     <div className="dice-arena">
       <div className="roller-card">
@@ -1190,7 +1190,7 @@ function DiceRoller({ c, update }) {
           )}
         </div>
       </div>
- 
+
       {pool.length > 0 && (
         <div className="pool-chips">
           {[...pool].sort((a, b) => b - a).map((v, i) => <span className="pool-chip" key={i}>{v}</span>)}
@@ -1200,7 +1200,7 @@ function DiceRoller({ c, update }) {
     </div>
   );
 }
- 
+
 function StepBackground({ c, update, num }) {
   return (
     <div className="step">
@@ -1220,7 +1220,7 @@ function StepBackground({ c, update, num }) {
     </div>
   );
 }
- 
+
 function StepSkills({ c, update, num }) {
   const cls = CLASSES[c.class];
   const bg = BACKGROUNDS[c.background];
@@ -1269,19 +1269,19 @@ function StepSkills({ c, update, num }) {
     </div>
   );
 }
- 
+
 function StepEquipment({ c, update, num }) {
   const [draft, setDraft] = useState("");
   const cls = CLASSES[c.class];
   const items = c.equipment || [];
- 
+
   // Auto-load the class+background starter kit the first time this step is opened.
   useEffect(() => {
     if (!c.equipmentLoaded && c.class) {
       update({ equipment: defaultEquipment(c), equipmentLoaded: true });
     }
   }, [c.class]); // eslint-disable-line
- 
+
   const addItem = () => {
     const v = draft.trim();
     if (!v) return;
@@ -1290,13 +1290,13 @@ function StepEquipment({ c, update, num }) {
   };
   const removeItem = (i) => update({ equipment: items.filter((_, idx) => idx !== i) });
   const loadKit = () => update({ equipment: defaultEquipment(c), equipmentLoaded: true });
- 
+
   return (
     <div className="step">
       <StepHead n={num} title="Starting Equipment"
         sub="A sensible starter kit is filled in from your class and background. Add or remove anything you like." />
       {!cls && <div className="warn">Pick a class first (step 3) to load a starter kit.</div>}
- 
+
       <div className="equip-wrap">
         <div className="equip-add">
           <input value={draft} placeholder="Add an item (e.g. Healer's kit, 50 gp, Torches ×5)"
@@ -1304,7 +1304,7 @@ function StepEquipment({ c, update, num }) {
             onKeyDown={(e) => { if (e.key === "Enter") addItem(); }} />
           <button className="btn btn-primary small" onClick={addItem}>＋ Add</button>
         </div>
- 
+
         {items.length === 0 ? (
           <div className="empty">No gear yet. {cls && <button className="linkbtn" onClick={loadKit}>Load the {cls.name} starter kit</button>}</div>
         ) : (
@@ -1318,17 +1318,17 @@ function StepEquipment({ c, update, num }) {
             ))}
           </ul>
         )}
- 
+
         {cls && (
           <button className="linkbtn reload" onClick={loadKit}>↺ Reset to {cls.name} + background starter kit</button>
         )}
       </div>
- 
+
       <WeaponEditor c={c} update={update} />
     </div>
   );
 }
- 
+
 function WeaponEditor({ c, update }) {
   const auto = deriveWeapons(c);
   const custom = c.weapons || [];
@@ -1336,7 +1336,7 @@ function WeaponEditor({ c, update }) {
   const [name, setName] = useState("");
   const [ability, setAbility] = useState("str");
   const [dice, setDice] = useState("1d8");
- 
+
   const add = () => {
     const n = name.trim();
     if (!n) return;
@@ -1344,7 +1344,7 @@ function WeaponEditor({ c, update }) {
     setName("");
   };
   const remove = (id) => update({ weapons: custom.filter((w) => w.id !== id) });
- 
+
   return (
     <div className="equip-wrap weapons-wrap">
       <div className="subhead">⚔ Attacks</div>
@@ -1384,7 +1384,7 @@ function WeaponEditor({ c, update }) {
     </div>
   );
 }
- 
+
 function StepSpells({ c, update, num }) {
   const cls = CLASSES[c.class];
   if (!isCaster(c.class)) {
@@ -1408,7 +1408,7 @@ function StepSpells({ c, update, num }) {
   const toggle = (name) => {
     update({ spells: chosen.includes(name) ? chosen.filter((s) => s !== name) : [...chosen, name] });
   };
- 
+
   return (
     <div className="step">
       <StepHead n={num} title="Choose Spells" sub={`You're level 1, so you can take cantrips and 1st-level spells for your ${cls.name}. Your DM sets exactly how many — pick the ones that excite you.`} />
@@ -1418,7 +1418,7 @@ function StepSpells({ c, update, num }) {
         <div className="sm-block"><span>Spell Attack</span><b>{fmt(atk)}</b></div>
         <div className="sm-block"><span>Chosen</span><b>{chosen.length}</b></div>
       </div>
- 
+
       {[0, 1].map((lvl) => {
         const list = available.filter((s) => s.level === lvl);
         if (list.length === 0) return null;
@@ -1443,7 +1443,7 @@ function StepSpells({ c, update, num }) {
     </div>
   );
 }
- 
+
 function StepReview({ c, num }) {
   const race = RACES[c.race];
   const cls = CLASSES[c.class];
@@ -1478,7 +1478,7 @@ function StepReview({ c, num }) {
     </div>
   );
 }
- 
+
 const ReviewRow = ({ label, value }) => (
   <div className="review-row"><span>{label}</span><b>{value}</b></div>
 );
@@ -1489,10 +1489,10 @@ const StepHead = ({ n, title, sub }) => (
     {sub && <p>{sub}</p>}
   </div>
 );
- 
+
 /* ============================ CHARACTER SHEET ============================ */
- 
-function Sheet({ c, onBack, onEdit }) {
+
+function Sheet({ c, update, onBack, onEdit }) {
   const race = RACES[c.race];
   const cls = CLASSES[c.class];
   const bg = BACKGROUNDS[c.background];
@@ -1508,7 +1508,17 @@ function Sheet({ c, onBack, onEdit }) {
   const spellDC = 8 + PROF_BONUS + spellMod;
   const spellAtk = PROF_BONUS + spellMod;
   const knownSpells = (c.spells || []).map((n) => SPELLS.find((s) => s.name === n)).filter(Boolean);
- 
+
+  const photoRef = useRef(null);
+  const onPhoto = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f || !update) return;
+    const r = new FileReader();
+    r.onload = () => update({ photo: r.result });
+    r.readAsDataURL(f);
+    e.target.value = "";
+  };
+
   return (
     <div className="sheet-wrap">
       <div className="sheet-toolbar no-print">
@@ -1518,9 +1528,25 @@ function Sheet({ c, onBack, onEdit }) {
           <button className="btn btn-primary small" onClick={() => window.print()}>🖨 Print</button>
         </div>
       </div>
- 
+
       <div className="sheet print-area">
         <div className="sheet-header">
+          <div className="sheet-portrait-wrap">
+            <div className={"sheet-portrait" + (c.photo ? " has" : "")}>
+              {c.photo
+                ? <img src={c.photo} alt="Character portrait" />
+                : <span className="sheet-portrait-ph no-print">Portrait</span>}
+            </div>
+            {update && (
+              <div className="sheet-portrait-btns no-print">
+                <button className="img-btn" onClick={() => photoRef.current && photoRef.current.click()}>
+                  {c.photo ? "Change" : "＋ Add photo"}
+                </button>
+                {c.photo && <button className="img-btn clear" title="Remove" onClick={() => update({ photo: "" })}>✕</button>}
+                <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onPhoto} />
+              </div>
+            )}
+          </div>
           <div className="sheet-title">
             <div className="sheet-name">{c.name || "Unnamed Hero"}</div>
             <div className="sheet-subline">
@@ -1531,7 +1557,7 @@ function Sheet({ c, onBack, onEdit }) {
             <span>Player</span><b>{c.player || "—"}</b>
           </div>
         </div>
- 
+
         <div className="sheet-cols">
           {/* LEFT: abilities */}
           <div className="col abilities-col">
@@ -1546,7 +1572,7 @@ function Sheet({ c, onBack, onEdit }) {
               );
             })}
           </div>
- 
+
           {/* MIDDLE: combat + saves */}
           <div className="col mid-col">
             <div className="combat-row">
@@ -1559,7 +1585,7 @@ function Sheet({ c, onBack, onEdit }) {
               <Stat label="Hit Dice" value={cls ? `1d${cls.hd}` : "—"} />
               <Stat label="Prof. Bonus" value={fmt(PROF_BONUS)} />
             </div>
- 
+
             {weapons.length > 0 && (
               <div className="panel">
                 <div className="panel-title">Attacks</div>
@@ -1580,7 +1606,7 @@ function Sheet({ c, onBack, onEdit }) {
                 </table>
               </div>
             )}
- 
+
             <div className="panel">
               <div className="panel-title">Saving Throws</div>
               <div className="save-grid">
@@ -1597,13 +1623,13 @@ function Sheet({ c, onBack, onEdit }) {
                 })}
               </div>
             </div>
- 
+
             <div className="panel passive">
               <span>Passive Perception</span>
               <b>{10 + perceptionMod}</b>
             </div>
           </div>
- 
+
           {/* RIGHT: skills */}
           <div className="col skills-col">
             <div className="panel">
@@ -1625,7 +1651,7 @@ function Sheet({ c, onBack, onEdit }) {
             </div>
           </div>
         </div>
- 
+
         {casterAbil && knownSpells.length > 0 && (
           <div className="panel spells-panel">
             <div className="panel-title">
@@ -1654,7 +1680,7 @@ function Sheet({ c, onBack, onEdit }) {
             </div>
           </div>
         )}
- 
+
         <div className="sheet-bottom three">
           <div className="panel">
             <div className="panel-title">Features &amp; Traits</div>
@@ -1681,25 +1707,25 @@ function Sheet({ c, onBack, onEdit }) {
             <div className="notes-text">{c.notes || "Spells, backstory, and the rest live here — write them in by hand at the table."}</div>
           </div>
         </div>
- 
+
         <div className="sheet-foot">Forged in The Adventurer's Forge · D&amp;D 5e mechanics (SRD 5.1)</div>
       </div>
     </div>
   );
 }
- 
+
 const Stat = ({ label, value, big }) => (
   <div className={"stat" + (big ? " stat-big" : "")}>
     <div className="stat-val">{value}</div>
     <div className="stat-label">{label}</div>
   </div>
 );
- 
+
 /* ============================ STYLES ============================ */
- 
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
- 
+
 * { box-sizing: border-box; }
 .grim {
   --ink:#2c2014; --ink-soft:#5a4a36; --parch:#f3e6c9; --parch-2:#ead7b0;
@@ -1714,7 +1740,7 @@ const CSS = `
     linear-gradient(160deg, #f6ecd4, #ecdab4 60%, #e4cfa3);
 }
 .loading { text-align:center; padding:80px; font-style:italic; color:var(--ink-soft); }
- 
+
 /* topbar */
 .topbar { display:flex; align-items:center; justify-content:space-between;
   padding:14px 22px; border-bottom:2px solid rgba(122,31,31,.35);
@@ -1725,11 +1751,11 @@ const CSS = `
 .brand-sub { font-size:12px; color:var(--ink-soft); letter-spacing:.12em; text-transform:uppercase; }
 .save-pill { font-size:12px; letter-spacing:.08em; color:var(--green); border:1px solid rgba(63,90,53,.4);
   padding:5px 12px; border-radius:20px; background:rgba(255,255,255,.35); }
- 
+
 .page { max-width:1080px; margin:0 auto; padding:30px 22px 70px; }
 .fade-in { animation:fade .5s ease both; }
 @keyframes fade { from { opacity:0; transform:translateY(8px);} to {opacity:1; transform:none;} }
- 
+
 /* hero */
 .hero { text-align:center; padding:34px 16px 26px; }
 .hero.compact { padding:18px 16px 10px; }
@@ -1739,7 +1765,7 @@ const CSS = `
 .hero-lead { max-width:620px; margin:0 auto 22px; font-size:18px; color:var(--ink-soft); }
 .hero-actions { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
 .center-cta { text-align:center; margin-top:30px; }
- 
+
 /* buttons */
 .btn { font-family:'Cinzel',serif; font-size:15px; letter-spacing:.03em; cursor:pointer;
   padding:12px 22px; border-radius:6px; border:1px solid transparent; transition:.18s; }
@@ -1753,14 +1779,14 @@ const CSS = `
 .back-link { background:none; border:none; font-family:'Cinzel',serif; color:var(--oxblood);
   cursor:pointer; font-size:14px; letter-spacing:.04em; padding:6px 0; }
 .back-link:hover { text-decoration:underline; }
- 
+
 /* section head */
 .section-head { display:flex; align-items:center; gap:16px; margin:28px 0 18px; }
 .section-head span { font-family:'Cinzel',serif; font-size:20px; color:var(--oxblood); letter-spacing:.04em; }
 .section-head i { flex:1; height:2px; background:linear-gradient(90deg, var(--gold-2), transparent); }
 .empty { text-align:center; padding:40px; color:var(--ink-soft); font-style:italic;
   border:1px dashed rgba(122,31,31,.3); border-radius:10px; background:rgba(255,255,255,.25); }
- 
+
 /* char cards */
 .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
 .char-card { border:1px solid rgba(122,31,31,.3); border-radius:10px; padding:16px;
@@ -1773,7 +1799,7 @@ const CSS = `
   border:1px solid var(--gold); background:rgba(255,255,255,.5); cursor:pointer; color:var(--ink); }
 .mini:hover { background:#fff; }
 .mini.danger { border-color:var(--oxblood); color:var(--oxblood); margin-left:auto; }
- 
+
 /* learn */
 .lesson-list { display:flex; flex-direction:column; gap:16px; margin-top:8px; }
 .lesson { display:flex; gap:20px; padding:20px; border-radius:10px; align-items:flex-start;
@@ -1840,7 +1866,7 @@ const CSS = `
 .class-card-desc { font-size:14px; color:var(--ink-soft); line-height:1.45; }
 .chip { font-size:13px; padding:4px 11px; border-radius:14px; background:rgba(122,31,31,.1);
   border:1px solid rgba(122,31,31,.25); color:var(--ink); }
- 
+
 /* builder */
 .builder-top { display:flex; flex-direction:column; gap:16px; margin-bottom:10px; }
 .stepper { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
@@ -1853,16 +1879,16 @@ const CSS = `
 .step-dot.active span { border-color:var(--oxblood); background:var(--oxblood); color:#f7ecd2; }
 .step-dot.done { opacity:.85; }
 .step-dot.done span { border-color:var(--green); color:var(--green); }
- 
+
 .builder-stage { min-height:340px; }
 .step-head { text-align:center; margin-bottom:22px; }
 .step-eyebrow { font-family:'Cinzel',serif; font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); }
 .step-head h2 { font-family:'Cinzel',serif; font-size:30px; margin:4px 0 8px; color:var(--ink); }
 .step-head p { color:var(--ink-soft); max-width:560px; margin:0 auto; font-size:16px; }
- 
+
 .builder-nav { display:flex; justify-content:space-between; margin-top:30px;
   border-top:1px solid rgba(122,31,31,.25); padding-top:20px; }
- 
+
 /* fields */
 .field { max-width:520px; margin:0 auto 18px; }
 .field label { display:block; font-family:'Cinzel',serif; font-size:13px; letter-spacing:.05em;
@@ -1872,7 +1898,7 @@ input, select { width:100%; font-family:'EB Garamond',serif; font-size:16px; col
   padding:11px 13px; border-radius:6px; border:1px solid rgba(122,31,31,.4);
   background:rgba(255,253,247,.85); }
 input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shadow:0 0 0 3px rgba(122,31,31,.12); }
- 
+
 /* option grid */
 .option-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
 .option { text-align:left; cursor:pointer; padding:16px; border-radius:10px;
@@ -1885,7 +1911,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .tag { font-size:12px; padding:2px 9px; border-radius:12px; background:rgba(63,90,53,.14);
   border:1px solid rgba(63,90,53,.3); color:var(--green); font-weight:600; }
 .option-blurb { font-size:14px; color:var(--ink-soft); }
- 
+
 .subpanel { margin-top:18px; padding:16px; border-radius:10px; background:rgba(255,255,255,.4);
   border:1px solid rgba(122,31,31,.25); }
 .subpanel-label { font-family:'Cinzel',serif; font-size:14px; color:var(--oxblood); margin-bottom:10px; }
@@ -1896,14 +1922,14 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .pill.on { background:var(--oxblood); color:#f7ecd2; border-color:#5a1414; }
 .pill.on em { color:#f0d9b0; }
 .he-select { width:auto; min-width:150px; }
- 
+
 .info-box { margin-top:20px; padding:16px 18px; border-radius:10px; border-left:4px solid var(--gold);
   background:rgba(255,255,255,.4); }
 .info-title { font-family:'Cinzel',serif; color:var(--oxblood); margin-bottom:8px; font-size:15px; }
 .info-box ul { margin:0; padding-left:20px; color:var(--ink-soft); }
 .info-box li { margin-bottom:4px; }
 .info-foot { margin-top:8px; font-weight:600; color:var(--green); }
- 
+
 /* abilities step */
 .method-row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:18px; }
 .method { cursor:pointer; padding:12px 20px; border-radius:8px; border:1px solid var(--gold);
@@ -1950,7 +1976,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .af-mod { font-size:13px; color:var(--green); font-weight:600; }
 .racial-note { margin-top:6px; font-size:12px; color:var(--green); }
 .tiny-note { text-align:center; margin-top:18px; color:var(--ink-soft); font-size:14px; font-style:italic; }
- 
+
 /* skills step */
 .skill-counter { text-align:center; font-family:'Cinzel',serif; color:var(--oxblood); margin-bottom:14px; }
 .skill-counter.done { color:var(--green); }
@@ -1964,7 +1990,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .skill-name { font-size:15px; flex:1; }
 .skill-abil { font-size:11px; letter-spacing:.08em; color:var(--ink-soft); }
 .skill-free { font-size:10px; color:var(--green); }
- 
+
 /* review */
 .warn, .points-left.over { color:var(--oxblood); }
 .warn { text-align:center; padding:12px; border-radius:8px; background:rgba(122,31,31,.1);
@@ -1980,7 +2006,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .ms-short { font-size:11px; letter-spacing:.1em; color:var(--ink-soft); }
 .ms-num { font-family:'Cinzel',serif; font-size:22px; color:var(--oxblood); }
 .ms-mod { font-size:13px; color:var(--green); font-weight:600; }
- 
+
 /* ============ SHEET ============ */
 .sheet-wrap { max-width:1000px; margin:0 auto; padding:20px 16px 60px; }
 .sheet-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
@@ -1990,14 +2016,22 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
   position:relative; }
 .sheet::before { content:""; position:absolute; inset:8px; border:1px solid rgba(122,31,31,.3);
   border-radius:4px; pointer-events:none; }
-.sheet-header { display:flex; justify-content:space-between; align-items:flex-end;
+.sheet-header { display:flex; justify-content:space-between; align-items:flex-end; gap:16px;
   border-bottom:2px solid var(--oxblood); padding-bottom:14px; margin-bottom:18px; }
+.sheet-title { flex:1; }
+.sheet-portrait-wrap { flex:none; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.sheet-portrait { width:92px; height:92px; border-radius:12px; overflow:hidden; flex:none;
+  border:2px solid var(--gold); background:radial-gradient(circle at 42% 30%, #fff, var(--parch) 70%, var(--parch-deep));
+  display:grid; place-items:center; box-shadow:0 3px 10px rgba(90,60,20,.18); }
+.sheet-portrait img { width:100%; height:100%; object-fit:cover; display:block; }
+.sheet-portrait-ph { font-family:'Cinzel',serif; font-size:12px; letter-spacing:.06em; color:var(--ink-soft); }
+.sheet-portrait-btns { display:flex; gap:6px; align-items:center; }
 .sheet-name { font-family:'Cinzel',serif; font-size:34px; color:var(--oxblood); line-height:1.1; }
 .sheet-subline { font-size:15px; color:var(--ink-soft); margin-top:4px; }
 .sheet-player { text-align:right; }
 .sheet-player span { display:block; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); }
 .sheet-player b { font-family:'Cinzel',serif; font-size:16px; }
- 
+
 .sheet-cols { display:grid; grid-template-columns:80px 1fr 1fr; gap:18px; }
 .abilities-col { display:flex; flex-direction:column; gap:10px; }
 .abox { border:2px solid var(--ink); border-radius:10px; padding:8px 4px; text-align:center;
@@ -2005,14 +2039,14 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .abox-name { font-family:'Cinzel',serif; font-size:12px; letter-spacing:.1em; color:var(--oxblood); }
 .abox-mod { font-family:'Cinzel',serif; font-size:26px; color:var(--ink); line-height:1; margin:4px 0; }
 .abox-score { font-size:13px; color:var(--ink-soft); border-top:1px solid rgba(122,31,31,.3); padding-top:3px; }
- 
+
 .combat-row { display:flex; gap:12px; margin-bottom:12px; }
 .stat { flex:1; border:1px solid rgba(122,31,31,.4); border-radius:8px; padding:8px; text-align:center;
   background:rgba(255,255,255,.5); }
 .stat-val { font-family:'Cinzel',serif; font-size:22px; color:var(--oxblood); }
 .stat-big .stat-val { font-size:28px; }
 .stat-label { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); }
- 
+
 .panel { border:1px solid rgba(122,31,31,.4); border-radius:8px; padding:12px 14px;
   background:rgba(255,255,255,.4); margin-bottom:12px; }
 .panel-title { font-family:'Cinzel',serif; font-size:13px; letter-spacing:.08em; text-transform:uppercase;
@@ -2028,7 +2062,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .skill-tag { font-size:11px; color:var(--ink-soft); }
 .passive { display:flex; justify-content:space-between; align-items:center; }
 .passive b { font-family:'Cinzel',serif; font-size:22px; color:var(--oxblood); }
- 
+
 .sheet-bottom { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:6px; }
 .sheet-bottom.three { grid-template-columns:1fr 1fr 1fr; }
 .sheet-equip { margin:0; padding-left:18px; font-size:13px; color:var(--ink); columns:1; }
@@ -2038,7 +2072,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
   border:1px solid rgba(63,90,53,.3); color:var(--ink); }
 .notes-text { font-size:14px; color:var(--ink-soft); font-style:italic; min-height:60px; }
 .sheet-foot { text-align:center; margin-top:18px; font-size:12px; color:var(--ink-soft); letter-spacing:.06em; }
- 
+
 @media (max-width:760px) {
   .sheet-cols { grid-template-columns:1fr; }
   .abilities-col { flex-direction:row; flex-wrap:wrap; }
@@ -2048,7 +2082,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
   .hero h1 { font-size:32px; }
   .dice-tray { gap:10px; }
 }
- 
+
 /* ============ CONFIRM / LINK / DICE / EQUIPMENT ============ */
 .char-card.confirming { border-color:var(--oxblood); box-shadow:0 0 0 2px rgba(122,31,31,.3); }
 .confirm-bar { display:flex; align-items:center; gap:8px; margin-top:14px; flex-wrap:wrap; }
@@ -2056,7 +2090,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .linkbtn { background:none; border:none; color:var(--oxblood); cursor:pointer; font-family:'EB Garamond',serif;
   font-size:inherit; text-decoration:underline; padding:0; }
 .linkbtn.reload { display:inline-block; margin-top:14px; font-size:13px; color:var(--ink-soft); }
- 
+
 .dice-arena { display:flex; flex-direction:column; align-items:center; gap:20px; }
 .roller-card { width:100%; max-width:460px; text-align:center; padding:22px; border-radius:14px;
   border:1px solid rgba(154,117,21,.5);
@@ -2085,7 +2119,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .roll-result s { color:var(--oxblood); }
 .roller-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
 .roller-done { font-size:16px; color:var(--green); text-align:center; max-width:460px; }
- 
+
 .roll-track { width:100%; max-width:460px; display:flex; flex-direction:column; gap:6px; }
 .track-row { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px;
   border:1px solid rgba(154,117,21,.3); background:rgba(255,255,255,.35); }
@@ -2100,7 +2134,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
   color:var(--ink-soft); width:28px; height:28px; }
 .track-redo:hover { background:#fff; color:var(--oxblood); }
 .roll-tip { max-width:460px; text-align:center; font-size:13px; font-style:italic; color:var(--ink-soft); }
- 
+
 .equip-wrap { max-width:560px; margin:0 auto; }
 .equip-add { display:flex; gap:10px; margin-bottom:16px; }
 .equip-add input { flex:1; }
@@ -2111,7 +2145,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .equip-text { flex:1; font-size:15px; }
 .equip-x { background:none; border:none; color:var(--oxblood); cursor:pointer; font-size:14px; opacity:.6; }
 .equip-x:hover { opacity:1; }
- 
+
 /* weapons editor */
 .weapons-wrap { margin-top:18px; }
 .subhead { font-family:'Cinzel',serif; font-size:16px; color:var(--oxblood); margin-bottom:6px; }
@@ -2125,7 +2159,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .weapon-table td { padding:8px; border-bottom:1px dotted rgba(122,31,31,.25); }
 .w-num { font-family:'Cinzel',serif; color:var(--oxblood); }
 .w-tag { font-size:11px; color:var(--ink-soft); }
- 
+
 /* spell picker */
 .spell-meta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:18px; }
 .sm-block { display:flex; flex-direction:column; align-items:center; padding:8px 16px; border-radius:8px;
@@ -2148,7 +2182,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .spell-meta-line { font-size:11px; letter-spacing:.03em; color:var(--green); font-weight:600; }
 .spell.on .spell-meta-line { color:#e9c98f; }
 .spell-effect { font-size:12px; color:var(--ink-soft); }
- 
+
 /* sheet attacks + spells */
 .attacks-table { width:100%; border-collapse:collapse; }
 .attacks-table th { text-align:left; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
@@ -2166,18 +2200,34 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .sd-name { font-family:'Cinzel',serif; font-size:13px; color:var(--ink); }
 .sd-meta { font-size:10px; color:var(--green); font-weight:600; white-space:nowrap; }
 .sd-desc { font-size:12px; color:var(--ink-soft); line-height:1.35; }
- 
- 
+
+
 @media print {
   .no-print { display:none !important; }
   .grim { background:#fff !important; }
   .sheet-wrap { padding:0; max-width:100%; }
-  .sheet { box-shadow:none; border:2px solid #000; background:#fff !important;
+  .sheet { box-shadow:none; border:none; background:#fff !important;
     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .sheet::before { border-color:#000; }
+  .sheet::before { display:none; }
   .abox { background:#fff !important; }
   body { background:#fff; }
   @page { margin:12mm; }
+
+  /* Stack into one column so panels paginate cleanly, then keep each block whole. */
+  .sheet-cols { display:block; }
+  .col { width:100%; }
+  .abilities-col { display:flex; flex-direction:row; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .abox { flex:1; min-width:84px; }
+  .sheet-bottom, .sheet-bottom.three { display:block; }
+  .spell-detail-list { grid-template-columns:1fr 1fr; }
+
+  /* Never split these across a page break. */
+  .panel, .abox, .combat-row, .stat,
+  .sd-group, .sd-item, .save-row, .skill-line,
+  .sheet-header, .features, .sheet-equip li, tr {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .panel { margin-bottom:10px; }
+  .sheet-bottom .panel { margin-bottom:10px; }
 }
 `;
- 
