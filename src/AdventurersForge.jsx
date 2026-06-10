@@ -182,6 +182,112 @@ function defaultEquipment(c) {
 
 // Classes that actually cast spells at level 1 (Paladins & Rangers don't until level 2).
 const CASTERS = { bard: "cha", cleric: "wis", druid: "wis", sorcerer: "cha", warlock: "cha", wizard: "int" };
+
+// Level-1 spellcasting rules: how many cantrips/spells you pick, and your spell slots.
+// spells: a number = fixed "known"; "prep" = ability mod + 1 (min 1), prepared casters.
+const SPELL_RULES = {
+  bard: { cantrips: 2, spells: 4, slots: 2, label: "knows" },
+  cleric: { cantrips: 3, spells: "prep", slots: 2, label: "prepares" },
+  druid: { cantrips: 2, spells: "prep", slots: 2, label: "prepares" },
+  sorcerer: { cantrips: 4, spells: 2, slots: 2, label: "knows" },
+  warlock: { cantrips: 2, spells: 2, slots: 1, label: "knows", shortRest: true },
+  wizard: { cantrips: 3, spells: 6, slots: 2, label: "has in their spellbook" },
+};
+function spellLimits(c) {
+  const r = SPELL_RULES[c.class];
+  if (!r) return null;
+  const max = r.spells === "prep" ? Math.max(1, mod(finalScore(c, CASTERS[c.class])) + 1) : r.spells;
+  return { cantrips: r.cantrips, spells: max, slots: r.slots, label: r.label, shortRest: !!r.shortRest };
+}
+
+// Innate racial spellcasting at level 1.
+// high elf: picks any wizard cantrip (INT). forest gnome: Minor Illusion (INT). tiefling: Thaumaturgy (CHA).
+function racialMagic(c) {
+  const out = [];
+  if (c.race === "elf" && c.subrace === "high") {
+    if (c.racialCantrip) {
+      const s = SPELLS.find((x) => x.name === c.racialCantrip);
+      if (s) out.push({ spell: s, abilKey: "int", source: "High Elf" });
+    }
+  }
+  if (c.race === "gnome" && c.subrace === "forest") {
+    const s = SPELLS.find((x) => x.name === "Minor Illusion");
+    if (s) out.push({ spell: s, abilKey: "int", source: "Forest Gnome" });
+  }
+  if (c.race === "tiefling") {
+    const s = SPELLS.find((x) => x.name === "Thaumaturgy");
+    if (s) out.push({ spell: s, abilKey: "cha", source: "Tiefling" });
+  }
+  return out;
+}
+const highElfNeedsCantrip = (c) => c.race === "elf" && c.subrace === "high" && !c.racialCantrip;
+
+// Dragonborn draconic ancestry: sets breath weapon damage type, shape, and save, plus resistance.
+const DRAGON_ANCESTRY = {
+  black: { name: "Black", dmg: "Acid", shape: "5 × 30 ft line", save: "dex" },
+  blue: { name: "Blue", dmg: "Lightning", shape: "5 × 30 ft line", save: "dex" },
+  brass: { name: "Brass", dmg: "Fire", shape: "5 × 30 ft line", save: "dex" },
+  bronze: { name: "Bronze", dmg: "Lightning", shape: "5 × 30 ft line", save: "dex" },
+  copper: { name: "Copper", dmg: "Acid", shape: "5 × 30 ft line", save: "dex" },
+  gold: { name: "Gold", dmg: "Fire", shape: "15 ft cone", save: "dex" },
+  green: { name: "Green", dmg: "Poison", shape: "15 ft cone", save: "con" },
+  red: { name: "Red", dmg: "Fire", shape: "15 ft cone", save: "dex" },
+  silver: { name: "Silver", dmg: "Cold", shape: "15 ft cone", save: "con" },
+  white: { name: "White", dmg: "Cold", shape: "15 ft cone", save: "con" },
+};
+
+// Level-1 class features, in plain words, for the sheet.
+const CLASS_FEATURES = {
+  barbarian: [
+    { n: "Rage (2/day)", d: "Bonus action: +2 melee damage, advantage on STR checks/saves, and you take half damage from weapons. Lasts up to 1 minute." },
+    { n: "Unarmored Defense", d: "With no armor, your AC is 10 + DEX mod + CON mod." },
+  ],
+  bard: [
+    { n: "Bardic Inspiration (d6)", d: "Bonus action: give an ally a d6 they can add to one attack, check, or save. Uses = your CHA modifier per long rest." },
+    { n: "Spellcasting", d: "You cast bard spells using Charisma. Slots return on a long rest." },
+  ],
+  cleric: [
+    { n: "Spellcasting", d: "You prepare and cast cleric spells using Wisdom. Slots return on a long rest." },
+    { n: "Divine Domain", d: "Your chosen domain (ask your DM) grants bonus spells and a level-1 feature." },
+  ],
+  druid: [
+    { n: "Spellcasting", d: "You prepare and cast druid spells using Wisdom. Slots return on a long rest." },
+    { n: "Druidic", d: "You know the secret language of druids and can leave hidden messages." },
+  ],
+  fighter: [
+    { n: "Fighting Style", d: "Pick one with your DM: e.g. Defense (+1 AC), Archery (+2 ranged attacks), or Dueling (+2 damage with a one-handed weapon)." },
+    { n: "Second Wind (1/short rest)", d: "Bonus action: heal yourself 1d10 + your level." },
+  ],
+  monk: [
+    { n: "Martial Arts (d4)", d: "Unarmed strikes and monk weapons can use DEX, deal 1d4, and after attacking you can make an unarmed strike as a bonus action." },
+    { n: "Unarmored Defense", d: "With no armor or shield, your AC is 10 + DEX mod + WIS mod." },
+  ],
+  paladin: [
+    { n: "Divine Sense (1 + CHA mod/day)", d: "Action: sense celestials, fiends, and undead within 60 ft until the end of your next turn." },
+    { n: "Lay on Hands (5 HP pool)", d: "Action: touch a creature to restore HP from a pool equal to 5 × your level." },
+  ],
+  ranger: [
+    { n: "Favored Enemy", d: "Pick a creature type with your DM — advantage on tracking and recalling lore about them." },
+    { n: "Natural Explorer", d: "Pick a favored terrain — you're faster, stealthier, and harder to lose there." },
+  ],
+  rogue: [
+    { n: "Sneak Attack (1d6)", d: "Once per turn, +1d6 damage with a finesse/ranged weapon if you have advantage or an ally is next to the target." },
+    { n: "Expertise", d: "Double your proficiency bonus on two of your skills (pick with your DM)." },
+    { n: "Thieves' Cant", d: "You know the secret slang and signs of the criminal underworld." },
+  ],
+  sorcerer: [
+    { n: "Spellcasting", d: "You cast sorcerer spells using Charisma. Slots return on a long rest." },
+    { n: "Sorcerous Origin", d: "Your magic's source (ask your DM) grants a level-1 feature, like Draconic Resilience." },
+  ],
+  warlock: [
+    { n: "Pact Magic", d: "You cast warlock spells using Charisma — your slot comes back on a short rest." },
+    { n: "Otherworldly Patron", d: "Your patron (ask your DM) grants a level-1 feature, like the Fiend's Dark One's Blessing." },
+  ],
+  wizard: [
+    { n: "Spellcasting", d: "You cast wizard spells using Intelligence from your spellbook. Slots return on a long rest." },
+    { n: "Arcane Recovery (1/day)", d: "After a short rest, recover spell slots totaling half your level (rounded up) — one 1st-level slot at level 1." },
+  ],
+};
 const isCaster = (cls) => !!CASTERS[cls];
 
 // A curated set of SRD spells (cantrips + levels 1-3), tagged by class.
@@ -202,6 +308,7 @@ const SPELLS = [
   { name: "Minor Illusion", level: 0, classes: ["bard", "sorcerer", "warlock", "wizard"], time: "1 action", comp: "S, M", effect: "Create a small sound or image." },
   { name: "Prestidigitation", level: 0, classes: ["bard", "sorcerer", "warlock", "wizard"], time: "1 action", comp: "V, S", effect: "Minor magical tricks and flourishes." },
   { name: "Spare the Dying", level: 0, classes: ["cleric"], time: "1 action", comp: "V, S", effect: "Stabilize a creature at 0 HP." },
+  { name: "Thaumaturgy", level: 0, classes: ["cleric"], time: "1 action", comp: "V", effect: "Minor divine wonders — booming voice, flickering flames, tremors." },
   // Level 1
   { name: "Magic Missile", level: 1, classes: ["sorcerer", "wizard"], time: "1 action", comp: "V, S", effect: "Three darts of force that never miss." },
   { name: "Burning Hands", level: 1, classes: ["sorcerer", "wizard"], time: "1 action", comp: "V, S", effect: "A cone of fire." },
@@ -282,6 +389,55 @@ const WEAPON_DB = [
   { key: "staff", name: "Quarterstaff", dice: "1d6", ability: "str" },
 ];
 
+// Recognized armors for auto-calculating AC from the inventory.
+// dex: "full" adds the whole DEX mod, "max2" caps it at +2, "none" ignores it.
+// Ordered so specific names match before generic ones (studded leather before leather, half plate before plate).
+const ARMOR_DB = [
+  { key: "studded leather", name: "Studded Leather", base: 12, dex: "full" },
+  { key: "padded", name: "Padded", base: 11, dex: "full" },
+  { key: "leather", name: "Leather Armor", base: 11, dex: "full" },
+  { key: "chain shirt", name: "Chain Shirt", base: 13, dex: "max2" },
+  { key: "scale mail", name: "Scale Mail", base: 14, dex: "max2" },
+  { key: "breastplate", name: "Breastplate", base: 14, dex: "max2" },
+  { key: "hide", name: "Hide Armor", base: 12, dex: "max2" },
+  { key: "half plate", name: "Half Plate", base: 15, dex: "max2" },
+  { key: "ring mail", name: "Ring Mail", base: 14, dex: "none" },
+  { key: "chain mail", name: "Chain Mail", base: 16, dex: "none" },
+  { key: "splint", name: "Splint", base: 17, dex: "none" },
+  { key: "plate", name: "Plate", base: 18, dex: "none" },
+];
+
+function deriveAC(c) {
+  const eq = (c.equipment || []).map((s) => String(s).toLowerCase());
+  const dex = mod(finalScore(c, "dex"));
+  let armor = null;
+  for (const item of eq) {
+    for (const a of ARMOR_DB) { if (item.includes(a.key)) { armor = a; break; } }
+    if (armor) break;
+  }
+  const hasShield = eq.some((s) => s.includes("shield"));
+
+  let base, src;
+  if (armor) {
+    const dexAdd = armor.dex === "full" ? dex : armor.dex === "max2" ? Math.min(2, dex) : 0;
+    base = armor.base + dexAdd;
+    src = armor.name;
+  } else {
+    base = 10 + dex;
+    src = "Unarmored";
+    if (c.class === "barbarian") {
+      const ud = 10 + dex + mod(finalScore(c, "con"));
+      if (ud > base) { base = ud; src = "Unarmored Defense"; }
+    }
+    if (c.class === "monk" && !hasShield) {
+      const ud = 10 + dex + mod(finalScore(c, "wis"));
+      if (ud > base) { base = ud; src = "Unarmored Defense"; }
+    }
+  }
+  const ac = base + (hasShield ? 2 : 0);
+  return { ac, src: hasShield ? src + " + Shield" : src };
+}
+
 function deriveWeapons(c) {
   const eq = c.equipment || [];
   const strMod = mod(finalScore(c, "str"));
@@ -359,8 +515,27 @@ function blankChar() {
     baseScores: { str: null, dex: null, con: null, int: null, wis: null, cha: null },
     pool: [...STANDARD_ARRAY], classSkills: [], acOverride: "", notes: "",
     equipment: [], equipmentLoaded: false, weapons: [], spells: [], photo: "",
+    hpCurrent: "", hpTemp: "", slotsUsed: 0, deathS: 0, deathF: 0, racialCantrip: "", dragonAncestry: "", breathUsed: false,
     level: 1, createdAt: Date.now(),
   };
+}
+
+// Backfill any fields added in newer versions of the app onto characters saved by
+// older versions. Stored values always win — defaults only fill what's missing —
+// so existing characters are never altered by an update.
+function migrateChar(stored) {
+  const defaults = blankChar();
+  const merged = { ...defaults, ...stored };
+  merged.baseScores = { ...defaults.baseScores, ...(stored.baseScores || {}) };
+  if (!Array.isArray(merged.halfElf)) merged.halfElf = ["", ""];
+  if (!Array.isArray(merged.pool)) merged.pool = [...STANDARD_ARRAY];
+  if (!Array.isArray(merged.equipment)) merged.equipment = [];
+  // If an older save already has gear, never let the starter-kit auto-load replace it.
+  if (merged.equipment.length > 0) merged.equipmentLoaded = true;
+  if (!Array.isArray(merged.weapons)) merged.weapons = [];
+  if (!Array.isArray(merged.spells)) merged.spells = [];
+  if (!Array.isArray(merged.classSkills)) merged.classSkills = [];
+  return merged;
 }
 
 /* ============================ APP ============================ */
@@ -378,7 +553,10 @@ export default function App() {
     (async () => {
       try {
         const r = await window.storage.get("dnd:roster");
-        if (r && r.value) setRoster(JSON.parse(r.value));
+        if (r && r.value) {
+          const raw = JSON.parse(r.value);
+          setRoster(Array.isArray(raw) ? raw.map(migrateChar) : []);
+        }
       } catch (e) { /* first run / no storage */ }
       try {
         const im = await window.storage.get("dnd:raceImages");
@@ -444,10 +622,11 @@ export default function App() {
 
         {!loaded && <div className="loading">Unrolling the scrolls…</div>}
         {loaded && view === "home" && (
-          <Home roster={roster} onNew={startNew} onLearn={() => setView("learn")}
+          <Home roster={roster} onNew={startNew} onLearn={() => setView("learn")} onCombat={() => setView("combat")}
             onEdit={editChar} onSheet={viewSheet} onDelete={deleteChar} />
         )}
-        {loaded && view === "learn" && <Learn onBack={() => setView("home")} onStart={startNew} raceImages={raceImages} setRaceImage={setRaceImage} />}
+        {loaded && view === "learn" && <Learn onBack={() => setView("home")} onStart={startNew} onCombat={() => setView("combat")} raceImages={raceImages} setRaceImage={setRaceImage} />}
+        {loaded && view === "combat" && <CombatPage onBack={() => setView("home")} onStart={startNew} />}
         {loaded && view === "build" && current && (
           <Builder c={current} update={update} step={step} setStep={setStep}
             raceImages={raceImages} setRaceImage={setRaceImage}
@@ -463,7 +642,7 @@ export default function App() {
 
 /* ============================ HOME / ROSTER ============================ */
 
-function Home({ roster, onNew, onLearn, onEdit, onSheet, onDelete }) {
+function Home({ roster, onNew, onLearn, onCombat, onEdit, onSheet, onDelete }) {
   return (
     <div className="page fade-in">
       <div className="hero">
@@ -475,6 +654,7 @@ function Home({ roster, onNew, onLearn, onEdit, onSheet, onDelete }) {
         </p>
         <div className="hero-actions">
           <button className="btn btn-ghost" onClick={onLearn}>📖 Learn the Basics</button>
+          <button className="btn btn-ghost" onClick={onCombat}>⚔ How Combat Works</button>
           <button className="btn btn-primary" onClick={onNew}>＋ Create a Character</button>
         </div>
       </div>
@@ -591,7 +771,7 @@ function RaceUpload({ kind, img, setRaceImage, label }) {
   );
 }
 
-function Learn({ onBack, onStart, raceImages = {}, setRaceImage }) {
+function Learn({ onBack, onStart, onCombat, raceImages = {}, setRaceImage }) {
   const lessons = [
     { n: 1, art: "race", t: "Choose a Race", d: "Your race (or species) is your character's heritage. It sets your speed, size, special traits, and gives bonuses to ability scores. Want a tank? Dwarves and half-orcs add Constitution and Strength. Want to be sneaky or a caster? Elves boost Dexterity, gnomes boost Intelligence.",
       opts: Object.values(RACES).map((r) => r.name) },
@@ -668,8 +848,281 @@ function Learn({ onBack, onStart, raceImages = {}, setRaceImage }) {
           </div>
         ))}
       </div>
+
+      <div className="center-cta">
+        <button className="btn btn-ghost" onClick={onCombat}>⚔ Next: How Combat Works ›</button>
+        <button className="btn btn-primary" onClick={onStart}>I'm ready — Create a Character ›</button>
+      </div>
+    </div>
+  );
+}
+
+function CombatPage({ onBack, onStart }) {
+  return (
+    <div className="page fade-in">
+      <button className="back-link no-print" onClick={onBack}>‹ Back</button>
+      <div className="hero compact">
+        <div className="hero-rule">◈ ◈ ◈</div>
+        <h1>⚔ How Combat Works</h1>
+        <p className="hero-lead">When a fight breaks out, the game switches to turns. It's simpler than it looks — six ideas cover almost everything, and you can practice at the bottom.</p>
+      </div>
+      <CombatLearn />
       <div className="center-cta">
         <button className="btn btn-primary" onClick={onStart}>I'm ready — Create a Character ›</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Combat lesson: illustrated panels + a practice fight ---------- */
+
+const CL = { ink: "#2c2014", ox: "#7a1f1f", ox2: "#9a2b2b", gold: "#c39a3e", green: "#3f5a35", parch: "#f3e6c9", soft: "#5a4a36" };
+
+function D20({ x = 0, y = 0, s = 1, label = "20", fill = CL.ox, dim = false }) {
+  return (
+    <g transform={`translate(${x},${y}) scale(${s})`} opacity={dim ? 0.38 : 1}>
+      <polygon points="20,0 38,10 38,30 20,40 2,30 2,10" fill={fill} stroke={CL.ink} strokeWidth="1.6" />
+      <polygon points="20,0 38,10 20,18 2,10" fill={CL.ox2} opacity="0.85" />
+      <text x="20" y="27" textAnchor="middle" fontSize="13" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">{label}</text>
+    </g>
+  );
+}
+
+function CombatArt({ kind }) {
+  const c = { width: "100%", viewBox: "0 0 260 120", xmlns: "http://www.w3.org/2000/svg" };
+  const card = (x, w, color, label, icon) => (
+    <g>
+      <rect x={x} y="30" width={w} height="58" rx="9" fill={CL.parch} stroke={color} strokeWidth="2.5" />
+      <text x={x + w / 2} y="78" textAnchor="middle" fontSize="11" fontWeight="700" fill={color} fontFamily="Cinzel, serif">{label}</text>
+      {icon}
+    </g>
+  );
+  if (kind === "initiative") {
+    return (
+      <svg {...c}>
+        <D20 x={10} y={36} label="d20" />
+        <text x="62" y="62" fontSize="13" fill={CL.green} fontWeight="700" fontFamily="Cinzel, serif">+DEX</text>
+        <path d="M96 58h22" stroke={CL.gold} strokeWidth="2.5" markerEnd="" /><path d="M118 58l-7-5v10z" fill={CL.gold} />
+        {[0, 1, 2].map((i) => (
+          <g key={i} transform={`translate(${132 + i * 40},38)`}>
+            <circle cx="16" cy="16" r="15" fill={i === 0 ? CL.ox : CL.parch} stroke={CL.ink} strokeWidth="1.8" />
+            <text x="16" y="21" textAnchor="middle" fontSize="13" fontWeight="700" fill={i === 0 ? CL.parch : CL.ink} fontFamily="Cinzel, serif">{i + 1}</text>
+          </g>
+        ))}
+        <text x="190" y="98" textAnchor="middle" fontSize="10" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">highest goes first</text>
+      </svg>
+    );
+  }
+  if (kind === "turn") {
+    return (
+      <svg {...c}>
+        {card(8, 74, CL.green, "MOVE", <path d="M30 44c4-6 10-6 13 0 3 6 9 6 13 0" transform="translate(2,6)" stroke={CL.green} strokeWidth="3" fill="none" strokeLinecap="round" />)}
+        {card(90, 74, CL.ox, "ACTION", <g transform="translate(118,40)"><rect x="6" y="-2" width="4" height="22" rx="1.5" fill={CL.ox} /><rect x="-1" y="14" width="18" height="4" rx="2" fill={CL.gold} /></g>)}
+        {card(172, 74, CL.gold, "BONUS", <path d="M209 42l3 8 8 1-6 6 2 8-7-5-7 5 2-8-6-6 8-1z" fill={CL.gold} stroke={CL.ink} strokeWidth="0.8" />)}
+        <rect x="76" y="96" width="108" height="18" rx="9" fill="none" stroke={CL.soft} strokeWidth="1.4" strokeDasharray="4 3" />
+        <text x="130" y="109" textAnchor="middle" fontSize="10" fill={CL.soft} fontFamily="Cinzel, serif">+ 1 REACTION / round</text>
+      </svg>
+    );
+  }
+  if (kind === "grid") {
+    const cs = 24, gx = 10, gy = 14, cols = 10, rows = 5;
+    const cx = (col) => gx + (col + 0.5) * cs;
+    const cy = (row) => gy + (row + 0.5) * cs;
+    const hatch = (col, row) => (
+      <g key={"dt" + col + row}>
+        <rect x={gx + col * cs + 1} y={gy + row * cs + 1} width={cs - 2} height={cs - 2} fill="rgba(154,117,21,.14)" />
+        {[5, 11, 17].map((o) => (
+          <line key={o} x1={gx + col * cs + o} y1={gy + row * cs + cs - 4} x2={gx + col * cs + o + 3} y2={gy + row * cs + cs - 11}
+            stroke={CL.green} strokeWidth="1.6" strokeLinecap="round" />
+        ))}
+      </g>
+    );
+    return (
+      <svg width="100%" viewBox="0 0 260 164" xmlns="http://www.w3.org/2000/svg">
+        <rect x={gx} y={gy} width={cols * cs} height={rows * cs} fill="#efe2c2" stroke={CL.soft} strokeWidth="1.5" />
+        {Array.from({ length: cols - 1 }).map((_, i) => (
+          <line key={"v" + i} x1={gx + (i + 1) * cs} y1={gy} x2={gx + (i + 1) * cs} y2={gy + rows * cs} stroke="rgba(90,74,54,.3)" strokeWidth="1" />
+        ))}
+        {Array.from({ length: rows - 1 }).map((_, i) => (
+          <line key={"h" + i} x1={gx} y1={gy + (i + 1) * cs} x2={gx + cols * cs} y2={gy + (i + 1) * cs} stroke="rgba(90,74,54,.3)" strokeWidth="1" />
+        ))}
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <rect key={"p" + i} x={gx + i * cs + 1.5} y={gy + 2 * cs + 1.5} width={cs - 3} height={cs - 3} fill="rgba(63,90,53,.2)" />
+        ))}
+        {hatch(3, 1)}{hatch(6, 3)}
+        <g>
+          <circle cx={gx + 8.5 * cs} cy={gy + 0.5 * cs} r="8" fill={CL.soft} stroke={CL.ink} strokeWidth="1.3" />
+          <path d={`M${gx + 8.5 * cs - 4} ${gy + 0.5 * cs + 2} q4 -10 8 0`} fill={CL.green} stroke={CL.ink} strokeWidth="1" />
+        </g>
+        <path d={`M${cx(0.9)} ${cy(2)} H ${cx(6) - 12}`} stroke={CL.gold} strokeWidth="2.6" strokeDasharray="5 4" />
+        <path d={`M${cx(6) - 12} ${cy(2)} l-7 -5 v10 z`} fill={CL.gold} />
+        <circle cx={cx(0)} cy={cy(2)} r="9.5" fill={CL.ox} stroke={CL.ink} strokeWidth="1.6" />
+        <text x={cx(0)} y={cy(2) + 4} textAnchor="middle" fontSize="10" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">YOU</text>
+        <circle cx={cx(7)} cy={cy(2)} r="9.5" fill={CL.green} stroke={CL.ink} strokeWidth="1.6" />
+        <text x={cx(7)} y={cy(2) + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">G</text>
+        <text x={gx + 3.5 * cs} y={gy - 3} textAnchor="middle" fontSize="10" fontWeight="700" fill={CL.green} fontFamily="Cinzel, serif">SPEED 30 FT = 6 SQUARES</text>
+        <text x="130" y="146" textAnchor="middle" fontSize="9.5" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">1 square = 5 ft · dashed path = your move</text>
+        <text x="130" y="158" textAnchor="middle" fontSize="9.5" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">tufted squares = difficult terrain (cost double)</text>
+      </svg>
+    );
+  }
+  if (kind === "attack") {
+    return (
+      <svg {...c}>
+        <D20 x={8} y={34} label="d20" />
+        <text x="56" y="60" fontSize="13" fill={CL.green} fontWeight="700" fontFamily="Cinzel, serif">+ATK</text>
+        <text x="100" y="61" fontSize="16" fill={CL.ink} fontFamily="Cinzel, serif">≥</text>
+        <g transform="translate(118,30)">
+          <path d="M20 0l20 6v14c0 15-20 26-20 26S0 35 0 20V6z" fill={CL.green} stroke={CL.ink} strokeWidth="1.6" />
+          <text x="20" y="22" textAnchor="middle" fontSize="11" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">AC</text>
+          <text x="20" y="34" textAnchor="middle" fontSize="11" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">13</text>
+        </g>
+        <path d="M168 58h18" stroke={CL.gold} strokeWidth="2.5" /><path d="M186 58l-7-5v10z" fill={CL.gold} />
+        <g transform="translate(196,36)">
+          <path d="M22 2l5 10 11-6-4 12 12 3-11 6 6 11-12-4-3 12-6-11-10 6 4-12-12-2 11-6-5-11 11 4z" fill={CL.ox2} stroke={CL.ox} strokeWidth="1" />
+          <text x="23" y="27" textAnchor="middle" fontSize="10" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">DMG</text>
+        </g>
+        <text x="130" y="108" textAnchor="middle" fontSize="10" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">meet or beat their Armor Class → roll damage</text>
+      </svg>
+    );
+  }
+  if (kind === "advantage") {
+    return (
+      <svg {...c}>
+        <text x="65" y="20" textAnchor="middle" fontSize="11" fontWeight="700" fill={CL.green} fontFamily="Cinzel, serif">ADVANTAGE</text>
+        <D20 x={22} y={28} label="17" fill={CL.green} />
+        <D20 x={68} y={28} label="8" dim />
+        <text x="65" y="92" textAnchor="middle" fontSize="10" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">roll 2, keep higher</text>
+        <line x1="130" y1="14" x2="130" y2="100" stroke={CL.gold} strokeWidth="1.4" strokeDasharray="4 4" />
+        <text x="195" y="20" textAnchor="middle" fontSize="11" fontWeight="700" fill={CL.ox} fontFamily="Cinzel, serif">DISADVANTAGE</text>
+        <D20 x={152} y={28} label="15" dim />
+        <D20 x={198} y={28} label="6" fill={CL.ox} />
+        <text x="195" y="92" textAnchor="middle" fontSize="10" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">roll 2, keep lower</text>
+      </svg>
+    );
+  }
+  // zerohp
+  return (
+    <svg {...c}>
+      <g transform="translate(18,30)">
+        <path d="M25 14C25 6 14 2 8 8c-6 6-2 14 17 28 19-14 23-22 17-28-6-6-17-2-17 6z" fill={CL.ox} stroke={CL.ink} strokeWidth="1.5" />
+        <text x="25" y="26" textAnchor="middle" fontSize="13" fontWeight="700" fill={CL.parch} fontFamily="Cinzel, serif">0</text>
+      </g>
+      <text x="106" y="40" fontSize="11" fontWeight="700" fill={CL.green} fontFamily="Cinzel, serif">✓ saves</text>
+      {[0, 1, 2].map((i) => <circle key={"s" + i} cx={166 + i * 24} cy={36} r="8" fill={i < 1 ? CL.green : "none"} stroke={CL.green} strokeWidth="2.2" />)}
+      <text x="106" y="76" fontSize="11" fontWeight="700" fill={CL.ox} fontFamily="Cinzel, serif">✗ fails</text>
+      {[0, 1, 2].map((i) => <circle key={"f" + i} cx={166 + i * 24} cy={72} r="8" fill="none" stroke={CL.ox} strokeWidth="2.2" />)}
+      <text x="130" y="108" textAnchor="middle" fontSize="10" fill={CL.soft} fontFamily="EB Garamond, serif" fontStyle="italic">d20 each turn: 10+ is a ✓ · three ✓ = stable · three ✗ = death</text>
+    </svg>
+  );
+}
+
+function CombatLearn() {
+  const panels = [
+    { art: "initiative", t: "1 · Roll Initiative", d: "When a fight starts, everyone rolls a d20 and adds their Dexterity modifier. That sets the turn order for the whole battle — highest first, then around the table, round after round. One round is about six seconds in the story." },
+    { art: "turn", t: "2 · Your Turn", d: "On your turn you can move up to your Speed and take one Action — Attack, Cast a Spell, Dash, Hide, Help, and so on. Some abilities add a Bonus Action. You also get one Reaction per round, used on other people's turns (like an opportunity attack when an enemy runs past you)." },
+    { art: "grid", t: "3 · The Battlefield & Movement", d: "Many tables play on a grid map where each square is 5 feet. Your Speed is how far you can move on your turn — Speed 30 ft means 6 squares, and you can split it up before and after your action. Difficult terrain like mud or undergrowth costs double squares. One warning: walking out of an enemy's reach lets them take a free swing at you (their Reaction) — use the Disengage action to slip away safely, or just go around." },
+    { art: "attack", t: "4 · Making an Attack", d: "Roll a d20 and add your Attack bonus from the sheet. If the total meets or beats the target's Armor Class, you hit — roll the Damage shown next to your weapon. A natural 20 is a critical hit: roll the damage dice twice!" },
+    { art: "advantage", t: "5 · Advantage & Disadvantage", d: "The DM's favorite tool. When circumstances help you (hidden, target knocked down), roll two d20s and keep the higher. When they hurt you (blinded, shooting at long range), roll two and keep the lower." },
+    { art: "zerohp", t: "6 · Dropping to 0 HP", d: "Hit 0 hit points and you fall unconscious — not dead. On each of your turns, roll a bare d20: 10 or higher is a success. Three successes and you stabilize; three failures and you die. A natural 20 brings you back up with 1 HP, and any healing wakes you instantly." },
+  ];
+  return (
+    <div className="combat-learn">
+      {panels.map((p, i) => (
+        <div className={"cl-row" + (i % 2 ? " flip" : "")} key={p.t}>
+          <div className="cl-art"><CombatArt kind={p.art} /></div>
+          <div className="cl-text">
+            <h3>{p.t}</h3>
+            <p>{p.d}</p>
+          </div>
+        </div>
+      ))}
+      <PracticeFight />
+    </div>
+  );
+}
+
+function PracticeFight() {
+  const AC = 13, ATK = 4, DMGMOD = 2;
+  const [goblinHP, setGoblinHP] = useState(7);
+  const [d20, setD20] = useState(null);
+  const [phase, setPhase] = useState("idle"); // idle | rolling | hit | miss | dmg | won
+  const [dmg, setDmg] = useState(null);
+  const iv = useRef(null);
+  useEffect(() => () => clearInterval(iv.current), []);
+
+  const rollAttack = () => {
+    clearInterval(iv.current);
+    setPhase("rolling"); setDmg(null);
+    let t = 0;
+    iv.current = setInterval(() => {
+      setD20(1 + Math.floor(Math.random() * 20));
+      if (++t >= 12) {
+        clearInterval(iv.current);
+        const v = 1 + Math.floor(Math.random() * 20);
+        setD20(v);
+        setPhase(v + ATK >= AC || v === 20 ? "hit" : "miss");
+      }
+    }, 60);
+  };
+  const rollDamage = () => {
+    const crit = d20 === 20;
+    const total = (1 + Math.floor(Math.random() * 8)) + (crit ? 1 + Math.floor(Math.random() * 8) : 0) + DMGMOD;
+    setDmg({ total, crit });
+    const hp = Math.max(0, goblinHP - total);
+    setGoblinHP(hp);
+    setPhase(hp === 0 ? "won" : "dmg");
+  };
+  const reset = () => { setGoblinHP(7); setD20(null); setDmg(null); setPhase("idle"); };
+  const crit = d20 === 20;
+
+  return (
+    <div className="practice-fight">
+      <div className="pf-title">⚔ Try it — fight a practice goblin!</div>
+      <div className="pf-stage">
+        <div className={"pf-goblin" + (phase === "dmg" || phase === "won" ? " ouch" : "")}>
+          <svg viewBox="0 0 80 80" width="84" height="84">
+            <ellipse cx="40" cy="72" rx="22" ry="5" fill="rgba(44,32,20,.18)" />
+            {phase === "won" ? (
+              <g transform="rotate(78 40 46)">
+                <circle cx="40" cy="40" r="20" fill={CL.green} stroke={CL.ink} strokeWidth="2" />
+                <path d="M30 20l5-8 3 7 4-7 4 8" fill={CL.green} stroke={CL.ink} strokeWidth="1.5" />
+                <text x="33" y="38" fontSize="9" fill={CL.ink}>✕</text><text x="43" y="38" fontSize="9" fill={CL.ink}>✕</text>
+              </g>
+            ) : (
+              <g>
+                <circle cx="40" cy="42" r="20" fill={CL.green} stroke={CL.ink} strokeWidth="2" />
+                <path d="M18 32l-8-10 13 4z" fill={CL.green} stroke={CL.ink} strokeWidth="1.5" />
+                <path d="M62 32l8-10-13 4z" fill={CL.green} stroke={CL.ink} strokeWidth="1.5" />
+                <circle cx="33" cy="38" r="2.6" fill={CL.ink} /><circle cx="47" cy="38" r="2.6" fill={CL.ink} />
+                <path d="M32 50q8 5 16 0" stroke={CL.ink} strokeWidth="2" fill="none" />
+                <path d="M34 50l2 4M46 50l-2 4" stroke={CL.parch} strokeWidth="2.4" strokeLinecap="round" />
+              </g>
+            )}
+          </svg>
+          <div className="pf-stats">
+            <span className="pf-chip">AC {AC}</span>
+            <span className="pf-chip hp">HP {goblinHP} / 7</span>
+          </div>
+        </div>
+
+        <div className="pf-controls">
+          {phase === "idle" && <p className="pf-msg">Your Attack bonus is <b>+{ATK}</b>. Beat its AC {AC} to hit!</p>}
+          {phase === "rolling" && <p className="pf-msg">Rolling… <b className="pf-die">{d20}</b></p>}
+          {phase === "hit" && <p className="pf-msg good">{crit ? <>Natural <b>20</b> — CRITICAL HIT! Double damage dice!</> : <>You rolled <b>{d20}</b> + {ATK} = <b>{d20 + ATK}</b> vs AC {AC} — a hit!</>}</p>}
+          {phase === "miss" && <p className="pf-msg bad">You rolled <b>{d20}</b> + {ATK} = <b>{d20 + ATK}</b> vs AC {AC} — a miss. It happens!</p>}
+          {phase === "dmg" && dmg && <p className="pf-msg good">{dmg.crit ? "2d8" : "1d8"} + {DMGMOD} = <b>{dmg.total} damage</b>! The goblin staggers…</p>}
+          {phase === "won" && dmg && <p className="pf-msg good"><b>{dmg.total} damage</b> — the goblin is defeated! That's the whole loop: roll to hit, then roll damage.</p>}
+          <div className="pf-btns">
+            {(phase === "idle" || phase === "miss" || phase === "dmg") && (
+              <button className="btn btn-primary small" onClick={rollAttack}>🎲 Roll to hit (d20 + {ATK})</button>
+            )}
+            {phase === "hit" && (
+              <button className="btn btn-primary small" onClick={rollDamage}>⚔ Roll damage ({crit ? "2d8" : "1d8"} + {DMGMOD})</button>
+            )}
+            {phase === "won" && <button className="btn btn-ghost small" onClick={reset}>↻ Fight another</button>}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -847,7 +1300,7 @@ function StepIdentity({ c, update, num }) {
 
 function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
   const race = RACES[c.race];
-  const pick = (key) => update({ race: key, subrace: "", halfElf: ["", ""] });
+  const pick = (key) => update({ race: key, subrace: "", halfElf: ["", ""], racialCantrip: "", dragonAncestry: "" });
   return (
     <div className="step">
       <StepHead n={num} title="Choose a Race" sub="Your heritage — sets speed, traits, and ability bonuses." />
@@ -883,7 +1336,7 @@ function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
           <div className="subpanel-label">Choose a {race.name} subrace:</div>
           <div className="pill-row">
             {Object.entries(race.subraces).map(([k, sr]) => (
-              <button key={k} className={"pill" + (c.subrace === k ? " on" : "")} onClick={() => update({ subrace: k })}>
+              <button key={k} className={"pill" + (c.subrace === k ? " on" : "")} onClick={() => update({ subrace: k, racialCantrip: "" })}>
                 {sr.name}
                 <em>{Object.entries(sr.bonus || {}).map(([a, v]) => `${ABILITIES.find((x) => x.key === a).short}+${v}`).join(" ")}</em>
               </button>
@@ -908,6 +1361,42 @@ function StepRace({ c, update, raceImages = {}, setRaceImage, num }) {
               </select>
             ))}
           </div>
+        </div>
+      )}
+
+      {c.race === "elf" && c.subrace === "high" && (
+        <div className="subpanel">
+          <div className="subpanel-label">High Elf bonus: choose one wizard cantrip (you cast it with Intelligence, for free, any time):</div>
+          <div className="cantrip-pick-grid">
+            {SPELLS.filter((s) => s.level === 0 && s.classes.includes("wizard")).map((s) => (
+              <button key={s.name} className={"spell" + (c.racialCantrip === s.name ? " on" : "")}
+                onClick={() => update({ racialCantrip: c.racialCantrip === s.name ? "" : s.name })}>
+                <span className="spell-check">{c.racialCantrip === s.name ? "✓" : "+"}</span>
+                <span className="spell-body">
+                  <span className="spell-name">{s.name}</span>
+                  <span className="spell-meta-line">{s.time} · {s.comp}</span>
+                  <span className="spell-effect">{s.effect}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {highElfNeedsCantrip(c) && <div className="assign-hint">Pick one — it's part of being a High Elf!</div>}
+        </div>
+      )}
+
+      {c.race === "dragonborn" && (
+        <div className="subpanel">
+          <div className="subpanel-label">Dragonborn: choose your draconic ancestry (sets your breath weapon &amp; damage resistance):</div>
+          <div className="pill-row">
+            {Object.entries(DRAGON_ANCESTRY).map(([k, d]) => (
+              <button key={k} className={"pill" + (c.dragonAncestry === k ? " on" : "")}
+                onClick={() => update({ dragonAncestry: k })}>
+                {d.name}
+                <em>{d.dmg} · {d.shape.includes("cone") ? "cone" : "line"}</em>
+              </button>
+            ))}
+          </div>
+          {!c.dragonAncestry && <div className="assign-hint">Pick one — your breath weapon depends on it!</div>}
         </div>
       )}
 
@@ -1405,37 +1894,56 @@ function StepSpells({ c, update, num }) {
   const atk = PROF_BONUS + abilMod;
   const chosen = c.spells || [];
   const available = SPELLS.filter((s) => s.classes.includes(c.class));
+  const limits = spellLimits(c);
+  const spellByName = (n) => SPELLS.find((s) => s.name === n);
+  const chosenCantrips = chosen.filter((n) => spellByName(n) && spellByName(n).level === 0).length;
+  const chosenSpells = chosen.filter((n) => spellByName(n) && spellByName(n).level === 1).length;
   const toggle = (name) => {
-    update({ spells: chosen.includes(name) ? chosen.filter((s) => s !== name) : [...chosen, name] });
+    if (chosen.includes(name)) { update({ spells: chosen.filter((s) => s !== name) }); return; }
+    const lvl = spellByName(name).level;
+    if (lvl === 0 && chosenCantrips >= limits.cantrips) return;
+    if (lvl === 1 && chosenSpells >= limits.spells) return;
+    update({ spells: [...chosen, name] });
   };
 
   return (
     <div className="step">
-      <StepHead n={num} title="Choose Spells" sub={`You're level 1, so you can take cantrips and 1st-level spells for your ${cls.name}. Your DM sets exactly how many — pick the ones that excite you.`} />
+      <StepHead n={num} title="Choose Spells"
+        sub={`At level 1, a ${cls.name} ${limits.label} ${limits.cantrips} cantrips and ${limits.spells} 1st-level spell${limits.spells > 1 ? "s" : ""}. Cantrips cast freely; 1st-level spells use your ${limits.slots} spell slot${limits.slots > 1 ? "s" : ""}${limits.shortRest ? " (back after a short rest)" : " (back after a long rest)"}.`} />
       <div className="spell-meta">
         <div className="sm-block"><span>Casting Ability</span><b>{abil.name}</b></div>
         <div className="sm-block"><span>Spell Save DC</span><b>{saveDC}</b></div>
         <div className="sm-block"><span>Spell Attack</span><b>{fmt(atk)}</b></div>
-        <div className="sm-block"><span>Chosen</span><b>{chosen.length}</b></div>
+        <div className={"sm-block" + (chosenCantrips === limits.cantrips ? " full" : "")}><span>Cantrips</span><b>{chosenCantrips} / {limits.cantrips}</b></div>
+        <div className={"sm-block" + (chosenSpells === limits.spells ? " full" : "")}><span>1st-Level</span><b>{chosenSpells} / {limits.spells}</b></div>
       </div>
 
       {[0, 1].map((lvl) => {
         const list = available.filter((s) => s.level === lvl);
         if (list.length === 0) return null;
+        const atCap = lvl === 0 ? chosenCantrips >= limits.cantrips : chosenSpells >= limits.spells;
         return (
           <div className="spell-group" key={lvl}>
-            <div className="spell-group-title">{SPELL_LEVEL_NAMES[lvl]}</div>
+            <div className="spell-group-title">
+              {SPELL_LEVEL_NAMES[lvl]}
+              <span className="sg-count">{lvl === 0 ? `${chosenCantrips} / ${limits.cantrips}` : `${chosenSpells} / ${limits.spells}`}</span>
+            </div>
             <div className="spell-grid">
-              {list.map((s) => (
-                <button key={s.name} className={"spell" + (chosen.includes(s.name) ? " on" : "")} onClick={() => toggle(s.name)}>
-                  <span className="spell-check">{chosen.includes(s.name) ? "✓" : "+"}</span>
-                  <span className="spell-body">
-                    <span className="spell-name">{s.name}</span>
-                    <span className="spell-meta-line">{s.time} · {s.comp}</span>
-                    <span className="spell-effect">{s.effect}</span>
-                  </span>
-                </button>
-              ))}
+              {list.map((s) => {
+                const on = chosen.includes(s.name);
+                const locked = !on && atCap;
+                return (
+                  <button key={s.name} className={"spell" + (on ? " on" : "") + (locked ? " locked" : "")}
+                    disabled={locked} onClick={() => toggle(s.name)}>
+                    <span className="spell-check">{on ? "✓" : "+"}</span>
+                    <span className="spell-body">
+                      <span className="spell-name">{s.name}</span>
+                      <span className="spell-meta-line">{s.time} · {s.comp}</span>
+                      <span className="spell-effect">{s.effect}</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         );
@@ -1498,7 +2006,9 @@ function Sheet({ c, update, onBack, onEdit }) {
   const bg = BACKGROUNDS[c.background];
   const sub = race && race.subraces && c.subrace ? race.subraces[c.subrace].name + " " : "";
   const dexMod = mod(finalScore(c, "dex"));
-  const ac = c.acOverride !== "" && c.acOverride != null ? Number(c.acOverride) : 10 + dexMod;
+  const acDerived = deriveAC(c);
+  const ac = c.acOverride !== "" && c.acOverride != null ? Number(c.acOverride) : acDerived.ac;
+  const acSrc = c.acOverride !== "" && c.acOverride != null ? "set manually" : acDerived.src;
   const prof = allProficientSkills(c);
   const perceptionMod = mod(finalScore(c, "wis")) + (prof.has("perception") ? PROF_BONUS : 0);
   const weapons = [...deriveWeapons(c), ...(c.weapons || [])];
@@ -1508,6 +2018,8 @@ function Sheet({ c, update, onBack, onEdit }) {
   const spellDC = 8 + PROF_BONUS + spellMod;
   const spellAtk = PROF_BONUS + spellMod;
   const knownSpells = (c.spells || []).map((n) => SPELLS.find((s) => s.name === n)).filter(Boolean);
+  const limits = casterAbilKey ? spellLimits(c) : null;
+  const innate = racialMagic(c);
 
   const photoRef = useRef(null);
   const onPhoto = (e) => {
@@ -1576,7 +2088,7 @@ function Sheet({ c, update, onBack, onEdit }) {
           {/* MIDDLE: combat + saves */}
           <div className="col mid-col">
             <div className="combat-row">
-              <Stat label="Armor Class" value={ac} />
+              <Stat label="Armor Class" value={ac} sub={acSrc} />
               <Stat label="Initiative" value={fmt(dexMod)} />
               <Stat label="Speed" value={getSpeed(c) + " ft"} />
             </div>
@@ -1584,6 +2096,39 @@ function Sheet({ c, update, onBack, onEdit }) {
               <Stat label="Hit Points" value={cls ? maxHP(c) : "—"} big />
               <Stat label="Hit Dice" value={cls ? `1d${cls.hd}` : "—"} />
               <Stat label="Prof. Bonus" value={fmt(PROF_BONUS)} />
+            </div>
+
+            <div className="panel hp-panel">
+              <div className="hp-track">
+                <label className="hp-field">
+                  <span>Current HP</span>
+                  <input className="hp-input" value={c.hpCurrent ?? ""}
+                    placeholder={cls ? String(maxHP(c)) : ""}
+                    onChange={(e) => update && update({ hpCurrent: e.target.value })} />
+                </label>
+                <label className="hp-field">
+                  <span>Temp HP</span>
+                  <input className="hp-input" value={c.hpTemp ?? ""} placeholder="0"
+                    onChange={(e) => update && update({ hpTemp: e.target.value })} />
+                </label>
+                <div className="death-saves">
+                  <span className="ds-label">Death Saves</span>
+                  <div className="ds-row">
+                    <em>✓</em>
+                    {[1, 2, 3].map((i) => (
+                      <button key={"s" + i} className={"pip" + ((c.deathS || 0) >= i ? " on" : "")}
+                        onClick={() => update && update({ deathS: (c.deathS || 0) >= i ? i - 1 : i })} />
+                    ))}
+                  </div>
+                  <div className="ds-row">
+                    <em>✗</em>
+                    {[1, 2, 3].map((i) => (
+                      <button key={"f" + i} className={"pip fail" + ((c.deathF || 0) >= i ? " on" : "")}
+                        onClick={() => update && update({ deathF: (c.deathF || 0) >= i ? i - 1 : i })} />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {weapons.length > 0 && (
@@ -1658,6 +2203,19 @@ function Sheet({ c, update, onBack, onEdit }) {
               Spells — {casterAbil.name} · Save DC {spellDC} · Attack {fmt(spellAtk)}
               <span className="comp-legend">V verbal · S somatic · M material</span>
             </div>
+            {limits && (
+              <div className="slot-row">
+                <span className="slot-label">1st-Level Slots</span>
+                {Array.from({ length: limits.slots }).map((_, i) => (
+                  <button key={i} className={"pip slot" + ((c.slotsUsed || 0) > i ? " on" : "")}
+                    title="Tap when you cast a 1st-level spell"
+                    onClick={() => update && update({ slotsUsed: (c.slotsUsed || 0) > i ? i : i + 1 })} />
+                ))}
+                <span className="slot-note">
+                  tap when used · all back after a {limits.shortRest ? "short" : "long"} rest · cantrips are unlimited
+                </span>
+              </div>
+            )}
             <div className="spell-detail-list">
               {[0, 1].map((lvl) => {
                 const list = knownSpells.filter((s) => s.level === lvl);
@@ -1681,6 +2239,55 @@ function Sheet({ c, update, onBack, onEdit }) {
           </div>
         )}
 
+        {innate.length > 0 && (
+          <div className="panel innate-panel">
+            <div className="panel-title">Innate Magic — from your race</div>
+            {innate.map(({ spell, abilKey, source }) => {
+              const a = ABILITIES.find((x) => x.key === abilKey);
+              const m = mod(finalScore(c, abilKey));
+              return (
+                <div className="sd-item" key={spell.name}>
+                  <div className="sd-head">
+                    <span className="sd-name">{spell.name} <span className="w-tag">{source} · casts with {a.name} (DC {8 + PROF_BONUS + m}, attack {fmt(PROF_BONUS + m)})</span></span>
+                    <span className="sd-meta">{spell.time} · {spell.comp}</span>
+                  </div>
+                  <div className="sd-desc">{spell.effect} Cantrip — cast it as often as you like, no spell slot needed.</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {c.race === "dragonborn" && (
+          <div className="panel innate-panel">
+            <div className="panel-title">Breath Weapon — Dragonborn</div>
+            {c.dragonAncestry && DRAGON_ANCESTRY[c.dragonAncestry] ? (() => {
+              const d = DRAGON_ANCESTRY[c.dragonAncestry];
+              const dc = 8 + mod(finalScore(c, "con")) + PROF_BONUS;
+              const saveA = ABILITIES.find((a) => a.key === d.save);
+              return (
+                <div className="sd-item">
+                  <div className="sd-head">
+                    <span className="sd-name">{d.name} Dragon — {d.dmg} Breath <span className="w-tag">{d.shape}</span></span>
+                    <span className="sd-meta">1 action · 1 / rest
+                      <button className={"pip slot breath-pip" + (c.breathUsed ? " on" : "")}
+                        title="Tap when used; back after a short or long rest"
+                        onClick={() => update && update({ breathUsed: !c.breathUsed })} />
+                    </span>
+                  </div>
+                  <div className="sd-desc">
+                    Exhale {d.dmg.toLowerCase()} in a {d.shape}. Each creature caught makes a DC {dc} {saveA.name} save,
+                    taking <b>2d6 {d.dmg.toLowerCase()}</b> damage on a fail, half on a success. Recharges on a short or long rest.
+                    You are also <b>resistant to {d.dmg.toLowerCase()} damage</b> (take half).
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className="sd-desc">Choose your draconic ancestry in the builder's Race step to set your breath weapon and resistance.</div>
+            )}
+          </div>
+        )}
+
         <div className="sheet-bottom three">
           <div className="panel">
             <div className="panel-title">Features &amp; Traits</div>
@@ -1688,9 +2295,16 @@ function Sheet({ c, update, onBack, onEdit }) {
               {race && [...race.traits, ...(race.subraces && c.subrace ? race.subraces[c.subrace].traits : [])].map((t, i) => (
                 <span className="feat" key={"r" + i}>{t}</span>
               ))}
-              {cls && <span className="feat">Class: {cls.name} (saves in {cls.saves.map((s) => s.toUpperCase()).join(", ")})</span>}
               {bg && <span className="feat">Background: {bg.name}</span>}
             </div>
+            {cls && CLASS_FEATURES[c.class] && (
+              <div className="cf-list">
+                <div className="cf-title">{cls.name} — Level 1 Features</div>
+                {CLASS_FEATURES[c.class].map((f) => (
+                  <div className="cf-item" key={f.n}><b>{f.n}.</b> {f.d}</div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="panel">
             <div className="panel-title">Equipment</div>
@@ -1708,16 +2322,29 @@ function Sheet({ c, update, onBack, onEdit }) {
           </div>
         </div>
 
+        <div className="panel quickref">
+          <div className="panel-title">New Player Quick Reference</div>
+          <div className="qr-grid">
+            <div className="qr-item"><b>Ability check / save:</b> roll a d20, add the modifier shown — meet or beat the DC the DM gives you.</div>
+            <div className="qr-item"><b>Attack:</b> roll a d20 + your Attack bonus vs the target's AC. If it hits, roll the Damage shown.</div>
+            <div className="qr-item"><b>Advantage / disadvantage:</b> roll two d20s and take the higher / lower one.</div>
+            <div className="qr-item"><b>Your turn:</b> you can move up to your Speed and take one Action (attack, cast, dash, hide, help...).</div>
+            <div className="qr-item"><b>Casting:</b> cantrips are free; a 1st-level spell spends a spell slot — mark one off above.</div>
+            <div className="qr-item"><b>At 0 HP:</b> you fall unconscious — roll a d20 each turn: 10+ is a success. Three ✓ stabilizes you, three ✗ and you die.</div>
+          </div>
+        </div>
+
         <div className="sheet-foot">Forged in The Adventurer's Forge · D&amp;D 5e mechanics (SRD 5.1)</div>
       </div>
     </div>
   );
 }
 
-const Stat = ({ label, value, big }) => (
+const Stat = ({ label, value, big, sub }) => (
   <div className={"stat" + (big ? " stat-big" : "")}>
     <div className="stat-val">{value}</div>
     <div className="stat-label">{label}</div>
+    {sub && <div className="stat-sub">{sub}</div>}
   </div>
 );
 
@@ -2046,6 +2673,7 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .stat-val { font-family:'Cinzel',serif; font-size:22px; color:var(--oxblood); }
 .stat-big .stat-val { font-size:28px; }
 .stat-label { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); }
+.stat-sub { font-size:10px; color:var(--green); font-style:italic; margin-top:1px; }
 
 .panel { border:1px solid rgba(122,31,31,.4); border-radius:8px; padding:12px 14px;
   background:rgba(255,255,255,.4); margin-bottom:12px; }
@@ -2079,6 +2707,9 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
   .abox { flex:1; min-width:80px; }
   .sheet-bottom, .sheet-bottom.three { grid-template-columns:1fr; }
   .spell-detail-list { grid-template-columns:1fr; }
+  .qr-grid { grid-template-columns:1fr; }
+  .cl-row, .cl-row.flip { flex-direction:column; }
+  .cl-art { width:100%; max-width:320px; }
   .hero h1 { font-size:32px; }
   .dice-tray { gap:10px; }
 }
@@ -2201,6 +2832,85 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .sd-meta { font-size:10px; color:var(--green); font-weight:600; white-space:nowrap; }
 .sd-desc { font-size:12px; color:var(--ink-soft); line-height:1.35; }
 
+/* HP tracker + death saves */
+.hp-panel { padding:10px 14px; }
+.hp-track { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+.hp-field { display:flex; flex-direction:column; gap:2px; }
+.hp-field span { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); }
+.hp-input { width:84px; text-align:center; font-family:'Cinzel',serif; font-size:18px; padding:6px 4px; }
+.death-saves { margin-left:auto; }
+.ds-label { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:2px; }
+.ds-row { display:flex; align-items:center; gap:5px; margin-bottom:3px; }
+.ds-row em { font-style:normal; font-size:11px; width:12px; color:var(--ink-soft); }
+.pip { width:16px; height:16px; border-radius:50%; border:2px solid var(--ink-soft); background:transparent;
+  cursor:pointer; padding:0; }
+.pip.on { background:var(--green); border-color:var(--green); }
+.pip.fail.on { background:var(--oxblood); border-color:var(--oxblood); }
+.pip.slot { width:18px; height:18px; border-color:var(--oxblood); }
+.pip.slot.on { background:var(--oxblood); }
+
+/* spell slot row */
+.slot-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;
+  padding:7px 10px; border-radius:8px; background:rgba(122,31,31,.06); border:1px dashed rgba(122,31,31,.3); }
+.slot-label { font-family:'Cinzel',serif; font-size:12px; letter-spacing:.04em; color:var(--oxblood); }
+.slot-note { font-size:11px; font-style:italic; color:var(--ink-soft); }
+
+/* picker counters */
+.sm-block.full b { color:var(--green); }
+.sg-count { float:right; font-family:'EB Garamond',serif; font-size:12px; color:var(--ink-soft); }
+.spell.locked { opacity:.45; cursor:not-allowed; }
+
+/* quick reference */
+.quickref { margin-top:6px; }
+.qr-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; }
+.qr-item { font-size:12.5px; color:var(--ink-soft); line-height:1.4; }
+.qr-item b { color:var(--ink); font-family:'Cinzel',serif; font-size:12px; }
+
+/* racial cantrip picker + innate magic + class features */
+.cantrip-pick-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; }
+.innate-panel { margin-top:6px; }
+.cf-list { margin-top:10px; border-top:1px dotted rgba(122,31,31,.3); padding-top:8px; }
+.cf-title { font-family:'Cinzel',serif; font-size:12px; letter-spacing:.05em; color:var(--oxblood); margin-bottom:5px; }
+.cf-item { font-size:12.5px; color:var(--ink-soft); line-height:1.4; margin-bottom:5px; }
+.cf-item b { color:var(--ink); font-family:'Cinzel',serif; font-size:12px; }
+.breath-pip { vertical-align:middle; margin-left:6px; }
+
+/* combat lesson */
+.combat-head { margin-top:40px; }
+.combat-head span { font-size:24px; }
+.combat-lead { text-align:center; margin-bottom:24px !important; }
+.combat-learn { display:flex; flex-direction:column; gap:16px; }
+.cl-row { display:flex; gap:22px; align-items:center; padding:18px 22px; border-radius:12px;
+  border:1px solid rgba(154,117,21,.35);
+  background:linear-gradient(180deg, rgba(255,251,240,.65), rgba(244,230,201,.45)); }
+.cl-row.flip { flex-direction:row-reverse; }
+.cl-art { flex:none; width:280px; padding:10px; border-radius:10px;
+  background:radial-gradient(circle at 45% 30%, rgba(255,255,255,.75), rgba(244,225,196,.45));
+  border:1px solid rgba(154,117,21,.4); }
+.cl-text { flex:1; }
+.cl-text h3 { font-family:'Cinzel',serif; margin:0 0 8px; color:var(--oxblood); font-size:20px; }
+.cl-text p { margin:0; color:var(--ink-soft); font-size:16px; line-height:1.55; }
+
+/* practice fight */
+.practice-fight { margin-top:6px; padding:20px 22px; border-radius:12px;
+  border:2px solid var(--oxblood); background:linear-gradient(160deg, rgba(255,247,230,.85), rgba(240,218,180,.7));
+  box-shadow:0 6px 18px rgba(122,31,31,.15); }
+.pf-title { font-family:'Cinzel',serif; font-size:19px; color:var(--oxblood); text-align:center; margin-bottom:14px; }
+.pf-stage { display:flex; gap:24px; align-items:center; justify-content:center; flex-wrap:wrap; }
+.pf-goblin { text-align:center; transition:transform .12s; }
+.pf-goblin.ouch { animation:gobshake .35s ease; }
+@keyframes gobshake { 0%{transform:translateX(0);} 25%{transform:translateX(-6px) rotate(-3deg);} 60%{transform:translateX(5px) rotate(2deg);} 100%{transform:translateX(0);} }
+.pf-stats { display:flex; gap:6px; justify-content:center; margin-top:4px; }
+.pf-chip { font-size:12px; font-weight:700; padding:3px 10px; border-radius:12px; font-family:'Cinzel',serif;
+  background:rgba(63,90,53,.15); border:1px solid rgba(63,90,53,.4); color:var(--green); }
+.pf-chip.hp { background:rgba(122,31,31,.1); border-color:rgba(122,31,31,.35); color:var(--oxblood); }
+.pf-controls { max-width:380px; text-align:center; }
+.pf-msg { font-size:16px; color:var(--ink-soft); min-height:48px; margin:0 0 10px; }
+.pf-msg.good { color:var(--green); }
+.pf-msg.bad { color:var(--oxblood); }
+.pf-die { font-family:'Cinzel',serif; font-size:22px; color:var(--oxblood); }
+.pf-btns { display:flex; gap:10px; justify-content:center; }
+
 
 @media print {
   .no-print { display:none !important; }
@@ -2224,9 +2934,13 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
   /* Never split these across a page break. */
   .panel, .abox, .combat-row, .stat,
   .sd-group, .sd-item, .save-row, .skill-line,
-  .sheet-header, .features, .sheet-equip li, tr {
+  .sheet-header, .features, .sheet-equip li, tr,
+  .hp-panel, .slot-row, .qr-item, .quickref,
+  .innate-panel, .cf-item {
     break-inside: avoid; page-break-inside: avoid;
   }
+  .hp-input { border:1px solid #777; background:#fff; }
+  .pip { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .panel { margin-bottom:10px; }
   .sheet-bottom .panel { margin-bottom:10px; }
 }
