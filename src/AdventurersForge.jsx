@@ -2391,25 +2391,30 @@ function CombatTracker({ roster, onBack }) {
   const buildFromParty = () => roster.map((c) => ({
     id: c.id, name: c.name || "Unnamed Hero", photo: c.photo, race: c.race,
     init: "", isMonster: false, hp: CLASSES[c.class] ? maxHP(c) : 10, maxHp: CLASSES[c.class] ? maxHP(c) : 10,
+    ac: c.acOverride !== "" && c.acOverride != null ? Number(c.acOverride) : deriveAC(c).ac,
   }));
   const [entries, setEntries] = useState(buildFromParty);
   const [started, setStarted] = useState(false);
   const [turn, setTurn] = useState(0);
   const [round, setRound] = useState(1);
   const [mName, setMName] = useState("");
+  const [mHP, setMHP] = useState("");
 
   const order = started
     ? [...entries].sort((a, b) => (Number(b.init) || 0) - (Number(a.init) || 0))
     : entries;
 
   const setInit = (id, v) => setEntries((e) => e.map((x) => (x.id === id ? { ...x, init: v } : x)));
+  const rollInit = (id) => setEntries((e) => e.map((x) => (x.id === id ? { ...x, init: String(1 + Math.floor(Math.random() * 20)) } : x)));
+  const rollAllEmpty = () => setEntries((e) => e.map((x) => (String(x.init).trim() === "" ? { ...x, init: String(1 + Math.floor(Math.random() * 20)) } : x)));
   const addMonster = () => {
     const n = mName.trim() || "Monster";
-    setEntries((e) => [...e, { id: uid(), name: n, isMonster: true, init: "", hp: 10, maxHp: 10 }]);
-    setMName("");
+    const hp = Math.max(1, Number(mHP) || 10);
+    setEntries((e) => [...e, { id: uid(), name: n, isMonster: true, init: "", hp, maxHp: hp }]);
+    setMName(""); setMHP("");
   };
   const removeEntry = (id) => setEntries((e) => e.filter((x) => x.id !== id));
-  const bumpHP = (id, d) => setEntries((e) => e.map((x) => (x.id === id ? { ...x, hp: Math.max(0, (Number(x.hp) || 0) + d) } : x)));
+  const bumpHP = (id, d) => setEntries((e) => e.map((x) => (x.id === id ? { ...x, hp: Math.max(0, Math.min(x.maxHp || 9999, (Number(x.hp) || 0) + d)) } : x)));
 
   const start = () => { setStarted(true); setTurn(0); setRound(1); };
   const next = () => {
@@ -2419,10 +2424,17 @@ function CombatTracker({ roster, onBack }) {
       return nt;
     });
   };
+  const prev = () => {
+    setTurn((t) => {
+      if (t === 0) { setRound((r) => Math.max(1, r - 1)); return Math.max(0, order.length - 1); }
+      return t - 1;
+    });
+  };
   const reset = () => { setStarted(false); setTurn(0); setRound(1); setEntries(buildFromParty()); };
 
-  const activeId = started && order[turn] ? order[turn].id : null;
-  const onDeckId = started && order.length > 1 ? order[(turn + 1) % order.length].id : null;
+  const active = started && order[turn] ? order[turn] : null;
+  const onDeck = started && order.length > 1 ? order[(turn + 1) % order.length] : null;
+  const hpTier = (x) => { const p = x.maxHp ? x.hp / x.maxHp : 1; return p > 0.5 ? "hi" : p > 0.25 ? "mid" : "low"; };
 
   return (
     <div className="page fade-in tracker-page">
@@ -2433,7 +2445,7 @@ function CombatTracker({ roster, onBack }) {
             <button className="btn btn-primary small" onClick={start}>▶ Start Combat</button>
           ) : (
             <>
-              <span className="round-pill">Round {round}</span>
+              <button className="btn btn-ghost small" onClick={prev}>‹ Back</button>
               <button className="btn btn-primary small" onClick={next}>Next turn ›</button>
               <button className="btn btn-ghost small" onClick={reset}>↺ Reset</button>
             </>
@@ -2441,43 +2453,86 @@ function CombatTracker({ roster, onBack }) {
         </div>
       </div>
 
-      <div className="hero compact">
-        <h1>🗡 Combat Tracker</h1>
-        {!started
-          ? <p className="hero-lead">Set everyone's initiative (roll a d20 + DEX), add any monsters, then press Start Combat.</p>
-          : <p className="hero-lead">It's <b>{order[turn] ? order[turn].name : "—"}</b>'s turn. Press “Next turn” when they finish.</p>}
-      </div>
+      {!started ? (
+        <div className="hero compact">
+          <h1>🗡 Combat Tracker</h1>
+          <p className="hero-lead">Set everyone's initiative (roll a d20 + DEX, or tap 🎲), add any monsters, then press Start Combat.</p>
+        </div>
+      ) : (
+        <div className="turn-banner">
+          <div className="tb-round"><span>Round</span><b>{round}</b></div>
+          <div className={"tb-active" + (active && active.isMonster ? " monster" : "")}>
+            <div className={"tb-pic" + (active && active.photo ? " has" : "")}>
+              {active && active.photo ? <img src={active.photo} alt="" /> : active && active.isMonster ? <span className="tc-monster">👹</span> : active ? <RacePortrait kind={active.race} /> : null}
+            </div>
+            <div className="tb-text">
+              <span className="tb-label">Now acting</span>
+              <h2>{active ? active.name : "—"}</h2>
+              {active && <span className="tb-meta">Initiative {active.init || "—"} · AC {active.ac || "?"} · HP {active.hp}{active.maxHp ? `/${active.maxHp}` : ""}</span>}
+            </div>
+          </div>
+          {onDeck && (
+            <div className="tb-ondeck">
+              <span>On deck</span>
+              <div className={"tb-od-pic" + (onDeck.photo ? " has" : "")}>
+                {onDeck.photo ? <img src={onDeck.photo} alt="" /> : onDeck.isMonster ? <span className="tc-monster sm">👹</span> : <RacePortrait kind={onDeck.race} />}
+              </div>
+              <b>{onDeck.name}</b>
+            </div>
+          )}
+        </div>
+      )}
 
       {!started && (
-        <div className="monster-add no-print">
-          <input value={mName} placeholder="Add a monster (e.g. Goblin)" onChange={(e) => setMName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addMonster(); }} />
-          <button className="btn btn-ghost small" onClick={addMonster}>＋ Add monster</button>
+        <div className="setup-tools no-print">
+          <div className="monster-add">
+            <input value={mName} placeholder="Monster name (e.g. Goblin)" onChange={(e) => setMName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addMonster(); }} />
+            <input className="m-hp" value={mHP} placeholder="HP" inputMode="numeric" onChange={(e) => setMHP(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addMonster(); }} />
+            <button className="btn btn-ghost small" onClick={addMonster}>＋ Add monster</button>
+          </div>
+          <button className="btn btn-ghost small roll-all" onClick={rollAllEmpty}>🎲 Roll initiative for blanks</button>
         </div>
       )}
 
       <div className="track-list">
         {order.map((x, i) => {
-          const active = x.id === activeId;
-          const onDeck = x.id === onDeckId;
+          const isActive = active && x.id === active.id;
+          const isOnDeck = onDeck && x.id === onDeck.id && !isActive;
+          const down = x.hp === 0;
+          const pct = x.maxHp ? Math.max(0, Math.min(100, (x.hp / x.maxHp) * 100)) : 100;
           return (
-            <div className={"track-card" + (active ? " active" : "") + (onDeck ? " ondeck" : "") + (x.isMonster ? " monster" : "")} key={x.id}>
-              <div className="tc-order">{started ? i + 1 : "•"}</div>
+            <div className={"track-card" + (isActive ? " active" : "") + (isOnDeck ? " ondeck" : "") + (x.isMonster ? " monster" : "") + (down ? " down" : "")} key={x.id}>
+              <div className="tc-order">{started ? i + 1 : (x.isMonster ? "👹" : "•")}</div>
               <div className={"tc-pic" + (x.photo ? " has" : "")}>
                 {x.photo ? <img src={x.photo} alt="" /> : x.isMonster ? <span className="tc-monster">👹</span> : <RacePortrait kind={x.race} />}
+                {isActive && <span className="tc-crown">★</span>}
               </div>
               <div className="tc-main">
-                <div className="tc-name">{x.name}{active && <span className="tc-flag now">NOW</span>}{onDeck && <span className="tc-flag next">NEXT</span>}</div>
-                <div className="tc-hp">
-                  <button className="hpb minus no-print" onClick={() => bumpHP(x.id, -1)}>−</button>
-                  <span className="tc-hp-val">HP {x.hp}{x.maxHp ? ` / ${x.maxHp}` : ""}</span>
-                  <button className="hpb plus no-print" onClick={() => bumpHP(x.id, +1)}>＋</button>
-                  {x.hp === 0 && <span className="tc-down">DOWN</span>}
+                <div className="tc-name">
+                  {x.name}
+                  {isActive && <span className="tc-flag now">NOW</span>}
+                  {isOnDeck && <span className="tc-flag next">NEXT</span>}
+                  {down && <span className="tc-flag dead">DOWN</span>}
+                </div>
+                <div className={"hp-bar tier-" + hpTier(x)}>
+                  <div className="hp-fill" style={{ width: pct + "%" }} />
+                  <span className="hp-bar-label">{x.hp}{x.maxHp ? ` / ${x.maxHp}` : ""} HP</span>
+                </div>
+                <div className="tc-dmg no-print">
+                  <button className="hpb dmg" onClick={() => bumpHP(x.id, -5)}>−5</button>
+                  <button className="hpb dmg" onClick={() => bumpHP(x.id, -1)}>−1</button>
+                  <button className="hpb heal" onClick={() => bumpHP(x.id, +1)}>+1</button>
+                  <button className="hpb heal" onClick={() => bumpHP(x.id, +5)}>+5</button>
                 </div>
               </div>
               {!started && (
-                <input className="tc-init" value={x.init} placeholder="init" inputMode="numeric"
-                  onChange={(e) => setInit(x.id, e.target.value)} />
+                <div className="tc-init-wrap no-print">
+                  <input className="tc-init" value={x.init} placeholder="—" inputMode="numeric"
+                    onChange={(e) => setInit(x.id, e.target.value)} />
+                  <button className="init-roll" title="Roll d20" onClick={() => rollInit(x.id)}>🎲</button>
+                </div>
               )}
               {!started && x.isMonster && <button className="equip-x no-print" onClick={() => removeEntry(x.id)}>✕</button>}
             </div>
@@ -3440,33 +3495,89 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 /* combat tracker */
 .tracker-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .tracker-controls { display:flex; gap:10px; align-items:center; }
-.round-pill { font-family:'Cinzel',serif; font-size:14px; color:#f7ecd2; background:var(--oxblood); padding:6px 14px; border-radius:20px; }
-.monster-add { display:flex; gap:10px; justify-content:center; max-width:420px; margin:0 auto 18px; }
+
+/* turn banner */
+.turn-banner { display:flex; align-items:center; gap:18px; max-width:700px; margin:0 auto 22px; padding:16px 22px;
+  border-radius:16px; border:2px solid var(--oxblood); position:relative; overflow:hidden;
+  background:linear-gradient(120deg, rgba(122,31,31,.12), rgba(244,225,196,.5) 60%); box-shadow:0 8px 24px rgba(122,31,31,.2); }
+.tb-round { flex:none; text-align:center; width:74px; height:74px; border-radius:50%; display:grid; place-content:center;
+  background:radial-gradient(circle at 40% 35%, var(--oxblood), #5a1414); color:#f7ecd2; box-shadow:0 4px 12px rgba(90,20,20,.4); }
+.tb-round span { font-size:10px; letter-spacing:.12em; text-transform:uppercase; opacity:.85; }
+.tb-round b { font-family:'Cinzel',serif; font-size:28px; line-height:1; }
+.tb-active { flex:1; display:flex; align-items:center; gap:16px; }
+.tb-pic { flex:none; width:78px; height:78px; border-radius:14px; overflow:hidden; border:3px solid var(--gold);
+  display:grid; place-items:center; padding:5px; background:radial-gradient(circle at 40% 30%, #fff, var(--parch) 70%);
+  box-shadow:0 0 0 0 rgba(195,154,62,.6); animation:tbpulse 1.8s ease-in-out infinite; }
+.tb-active.monster .tb-pic { border-color:var(--green); }
+.tb-pic.has { padding:0; } .tb-pic img { width:100%; height:100%; object-fit:cover; }
+@keyframes tbpulse { 0%,100%{box-shadow:0 0 0 0 rgba(195,154,62,.55);} 50%{box-shadow:0 0 0 10px rgba(195,154,62,0);} }
+.tb-label { font-family:'EB Garamond',serif; font-style:italic; color:var(--oxblood); font-size:13px; letter-spacing:.05em; }
+.tb-text h2 { font-family:'Cinzel',serif; font-size:30px; color:var(--ink); margin:2px 0; line-height:1; }
+.tb-meta { font-size:13px; color:var(--ink-soft); }
+.tb-ondeck { flex:none; text-align:center; padding-left:18px; border-left:1px dashed rgba(122,31,31,.35); }
+.tb-ondeck span { display:block; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:4px; }
+.tb-od-pic { width:46px; height:46px; border-radius:50%; overflow:hidden; border:2px solid var(--gold); margin:0 auto 3px;
+  display:grid; place-items:center; padding:3px; background:radial-gradient(circle at 40% 30%, #fff, var(--parch) 70%); }
+.tb-od-pic.has { padding:0; } .tb-od-pic img { width:100%; height:100%; object-fit:cover; }
+.tb-ondeck b { font-family:'Cinzel',serif; font-size:13px; color:var(--ink); }
+.tc-monster.sm { font-size:18px; }
+
+/* setup */
+.setup-tools { display:flex; flex-direction:column; gap:10px; align-items:center; margin-bottom:18px; }
+.monster-add { display:flex; gap:10px; justify-content:center; max-width:460px; width:100%; }
 .monster-add input { flex:1; }
-.track-list { display:flex; flex-direction:column; gap:10px; max-width:680px; margin:0 auto; }
+.monster-add .m-hp { flex:none; width:70px; text-align:center; }
+.roll-all { opacity:.85; }
+
+/* list */
+.track-list { display:flex; flex-direction:column; gap:10px; max-width:700px; margin:0 auto; }
 .track-card { display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:12px;
-  border:1px solid rgba(154,117,21,.4); background:rgba(255,251,240,.65); transition:.18s; }
+  border:1px solid rgba(154,117,21,.4); background:rgba(255,251,240,.65); transition:.2s; }
 .track-card.monster { background:rgba(63,90,53,.1); }
-.track-card.active { border-color:var(--oxblood); box-shadow:0 0 0 3px rgba(122,31,31,.25), 0 6px 18px rgba(122,31,31,.2);
-  background:linear-gradient(180deg, rgba(255,247,230,.95), rgba(244,225,196,.8)); transform:scale(1.02); }
-.track-card.ondeck { border-color:var(--gold-2); }
-.tc-order { flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
-  font-family:'Cinzel',serif; background:var(--ink); color:var(--parch); font-size:14px; }
-.track-card.active .tc-order { background:var(--oxblood); }
-.tc-pic { flex:none; width:52px; height:52px; border-radius:50%; overflow:hidden; border:2px solid var(--gold);
+.track-card.ondeck { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+.track-card.active { border-color:var(--oxblood); box-shadow:0 0 0 3px rgba(122,31,31,.3), 0 8px 22px rgba(122,31,31,.25);
+  background:linear-gradient(180deg, rgba(255,247,230,.97), rgba(244,225,196,.82)); transform:scale(1.025); }
+.track-card.down { opacity:.6; }
+.track-card.down .tc-pic { filter:grayscale(1); }
+.tc-order { flex:none; width:32px; height:32px; border-radius:50%; display:grid; place-items:center;
+  font-family:'Cinzel',serif; background:var(--ink); color:var(--parch); font-size:15px; }
+.track-card.active .tc-order { background:var(--oxblood); box-shadow:0 0 0 3px rgba(122,31,31,.25); }
+.tc-pic { position:relative; flex:none; width:52px; height:52px; border-radius:50%; overflow:visible; border:2px solid var(--gold);
   display:grid; place-items:center; padding:4px; background:radial-gradient(circle at 40% 30%, #fff, var(--parch) 70%); }
-.tc-pic.has { padding:0; } .tc-pic img { width:100%; height:100%; object-fit:cover; }
+.tc-pic.has { padding:0; } .tc-pic img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+.tc-pic > :not(.tc-crown) { border-radius:50%; overflow:hidden; }
+.tc-crown { position:absolute; top:-12px; left:50%; transform:translateX(-50%); color:var(--gold-2); font-size:16px;
+  text-shadow:0 1px 2px rgba(0,0,0,.3); }
 .tc-monster { font-size:26px; }
-.tc-main { flex:1; }
-.tc-name { font-family:'Cinzel',serif; font-size:18px; color:var(--ink); display:flex; align-items:center; gap:8px; }
+.tc-main { flex:1; min-width:0; }
+.tc-name { font-family:'Cinzel',serif; font-size:18px; color:var(--ink); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .tc-flag { font-family:'EB Garamond',serif; font-size:11px; letter-spacing:.08em; padding:2px 8px; border-radius:10px; }
 .tc-flag.now { background:var(--oxblood); color:#f7ecd2; }
 .tc-flag.next { background:rgba(154,117,21,.2); color:var(--ink); border:1px solid var(--gold); }
-.tc-hp { display:flex; align-items:center; gap:8px; margin-top:3px; }
-.tc-hp-val { font-size:14px; color:var(--ink-soft); }
-.hpb { width:24px; height:24px; border-radius:50%; border:1px solid var(--oxblood); background:rgba(255,255,255,.6); color:var(--oxblood); cursor:pointer; font-size:14px; line-height:1; }
-.tc-down { font-family:'Cinzel',serif; font-size:11px; color:#f7ecd2; background:var(--oxblood); padding:2px 8px; border-radius:10px; }
-.tc-init { width:60px; text-align:center; font-family:'Cinzel',serif; font-size:18px; }
+.tc-flag.dead { background:#3a3a3a; color:#f7ecd2; }
+
+/* hp bar */
+.hp-bar { position:relative; height:18px; border-radius:9px; margin:5px 0 6px; overflow:hidden;
+  background:rgba(60,40,20,.16); border:1px solid rgba(90,60,20,.25); }
+.hp-fill { height:100%; border-radius:9px 0 0 9px; transition:width .35s ease; }
+.hp-bar.tier-hi .hp-fill { background:linear-gradient(90deg, #4e7a3e, #6fae53); }
+.hp-bar.tier-mid .hp-fill { background:linear-gradient(90deg, #b8862c, #d8b13f); }
+.hp-bar.tier-low .hp-fill { background:linear-gradient(90deg, #8a1f1f, #c0392b); }
+.hp-bar-label { position:absolute; inset:0; display:grid; place-items:center; font-size:11px; font-weight:700;
+  color:var(--ink); text-shadow:0 1px 1px rgba(255,255,255,.5); letter-spacing:.03em; }
+.tc-dmg { display:flex; gap:6px; }
+.hpb { min-width:34px; height:26px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:700; line-height:1;
+  border:1px solid rgba(90,60,20,.4); background:rgba(255,255,255,.55); }
+.hpb.dmg { color:var(--oxblood); border-color:rgba(122,31,31,.4); }
+.hpb.dmg:hover { background:rgba(122,31,31,.12); }
+.hpb.heal { color:var(--green); border-color:rgba(63,90,53,.4); }
+.hpb.heal:hover { background:rgba(63,90,53,.14); }
+
+/* init entry */
+.tc-init-wrap { flex:none; display:flex; align-items:center; gap:6px; }
+.tc-init { width:54px; text-align:center; font-family:'Cinzel',serif; font-size:18px; }
+.init-roll { border:none; background:none; font-size:20px; cursor:pointer; line-height:1; opacity:.8; }
+.init-roll:hover { opacity:1; transform:scale(1.12); }
 
 /* combat lesson */
 .combat-head { margin-top:40px; }
