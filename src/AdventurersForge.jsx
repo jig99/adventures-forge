@@ -180,24 +180,34 @@ function defaultEquipment(c) {
   return [...(CLASS_EQUIPMENT[c.class] || []), ...(BACKGROUND_EQUIPMENT[c.background] || [])];
 }
 
-// Classes that actually cast spells at level 1 (Paladins & Rangers don't until level 2).
-const CASTERS = { bard: "cha", cleric: "wis", druid: "wis", sorcerer: "cha", warlock: "cha", wizard: "int" };
+// Spellcasting ability per class. Paladins & Rangers don't cast until level 2 —
+// casterAbilityOf() gates them by the character's level.
+const CASTERS = { bard: "cha", cleric: "wis", druid: "wis", sorcerer: "cha", warlock: "cha", wizard: "int", paladin: "cha", ranger: "wis" };
+function casterAbilityOf(c) {
+  const a = CASTERS[c.class];
+  if (!a) return null;
+  if ((c.class === "paladin" || c.class === "ranger") && (c.level || 1) < 2) return null;
+  return a;
+}
 
-// Level-1 spellcasting rules: how many cantrips/spells you pick, and your spell slots.
-// spells: a number = fixed "known"; "prep" = ability mod + 1 (min 1), prepared casters.
-const SPELL_RULES = {
-  bard: { cantrips: 2, spells: 4, slots: 2, label: "knows" },
-  cleric: { cantrips: 3, spells: "prep", slots: 2, label: "prepares" },
-  druid: { cantrips: 2, spells: "prep", slots: 2, label: "prepares" },
-  sorcerer: { cantrips: 4, spells: 2, slots: 2, label: "knows" },
-  warlock: { cantrips: 2, spells: 2, slots: 1, label: "knows", shortRest: true },
-  wizard: { cantrips: 3, spells: 6, slots: 2, label: "has in their spellbook" },
-};
+// Spellcasting rules by level (1-2): how many cantrips/spells you pick, and your spell slots.
 function spellLimits(c) {
-  const r = SPELL_RULES[c.class];
-  if (!r) return null;
-  const max = r.spells === "prep" ? Math.max(1, mod(finalScore(c, CASTERS[c.class])) + 1) : r.spells;
-  return { cantrips: r.cantrips, spells: max, slots: r.slots, label: r.label, shortRest: !!r.shortRest };
+  const abil = casterAbilityOf(c);
+  if (!abil) return null;
+  const lvl = c.level || 1;
+  const m = mod(finalScore(c, abil));
+  const T = {
+    bard: { cantrips: 2, spells: lvl >= 2 ? 5 : 4, slots: lvl >= 2 ? 3 : 2, label: "knows" },
+    cleric: { cantrips: 3, spells: Math.max(1, m + lvl), slots: lvl >= 2 ? 3 : 2, label: "prepares" },
+    druid: { cantrips: 2, spells: Math.max(1, m + lvl), slots: lvl >= 2 ? 3 : 2, label: "prepares" },
+    sorcerer: { cantrips: 4, spells: lvl >= 2 ? 3 : 2, slots: lvl >= 2 ? 3 : 2, label: "knows" },
+    warlock: { cantrips: 2, spells: lvl >= 2 ? 3 : 2, slots: lvl >= 2 ? 2 : 1, label: "knows", shortRest: true },
+    wizard: { cantrips: 3, spells: lvl >= 2 ? 8 : 6, slots: lvl >= 2 ? 3 : 2, label: "has in their spellbook" },
+    paladin: { cantrips: 0, spells: Math.max(1, m + Math.floor(lvl / 2)), slots: 2, label: "prepares" },
+    ranger: { cantrips: 0, spells: 2, slots: 2, label: "knows" },
+  }[c.class];
+  if (!T) return null;
+  return { cantrips: T.cantrips, spells: T.spells, slots: T.slots, label: T.label, shortRest: !!T.shortRest };
 }
 
 // Innate racial spellcasting at level 1.
@@ -288,7 +298,53 @@ const CLASS_FEATURES = {
     { n: "Arcane Recovery (1/day)", d: "After a short rest, recover spell slots totaling half your level (rounded up) — one 1st-level slot at level 1." },
   ],
 };
-const isCaster = (cls) => !!CASTERS[cls];
+
+// New features gained at level 2, in plain words.
+const CLASS_FEATURES_2 = {
+  barbarian: [
+    { n: "Reckless Attack", d: "When you attack, you can go all-in: advantage on your Strength melee attacks this turn — but attacks against you also have advantage until your next turn." },
+    { n: "Danger Sense", d: "Advantage on Dexterity saves against effects you can see, like traps and spells." },
+  ],
+  bard: [
+    { n: "Jack of All Trades", d: "Add +1 (half your proficiency) to every ability check you're not already proficient in." },
+    { n: "Song of Rest (d6)", d: "During a short rest, your music lets allies who spend Hit Dice heal an extra 1d6." },
+  ],
+  cleric: [
+    { n: "Channel Divinity (1/rest)", d: "A burst of divine power: Turn Undead (frighten undead within 30 ft) or your domain's option. Returns on a short or long rest." },
+  ],
+  druid: [
+    { n: "Wild Shape (2/short rest)", d: "Action: transform into a beast you've seen (up to CR ¼, no flying or swimming yet) for up to an hour. You use its body, your mind." },
+  ],
+  fighter: [
+    { n: "Action Surge (1/short rest)", d: "Once per short rest, take one additional Action on your turn — yes, that can mean attacking twice." },
+  ],
+  monk: [
+    { n: "Ki (2 points)", d: "Spend ki for: Flurry of Blows (2 unarmed strikes as a bonus action after attacking), Patient Defense (Dodge as a bonus action), or Step of the Wind (Dash/Disengage as a bonus action). Back on a short rest." },
+    { n: "Unarmored Movement", d: "+10 ft speed while wearing no armor or shield (already added to your Speed)." },
+  ],
+  paladin: [
+    { n: "Spellcasting", d: "You now cast paladin spells using Charisma — pick them in the Spells step. Slots return on a long rest." },
+    { n: "Divine Smite", d: "When you hit with a melee weapon, you can burn a spell slot for +2d8 radiant damage (+3d8 vs undead/fiends)." },
+    { n: "Fighting Style", d: "Pick one with your DM: e.g. Defense (+1 AC), Dueling (+2 damage with a one-handed weapon), or Great Weapon Fighting." },
+  ],
+  ranger: [
+    { n: "Spellcasting", d: "You now cast ranger spells using Wisdom — pick them in the Spells step. Slots return on a long rest." },
+    { n: "Fighting Style", d: "Pick one with your DM: e.g. Archery (+2 to ranged attacks), Defense (+1 AC), or Two-Weapon Fighting." },
+  ],
+  rogue: [
+    { n: "Cunning Action", d: "Every turn, you can Dash, Disengage, or Hide as a bonus action. You are now extremely slippery." },
+  ],
+  sorcerer: [
+    { n: "Font of Magic (2 sorcery points)", d: "A pool of raw magic — convert points into extra spell slots or break slots down into points. Back on a long rest." },
+  ],
+  warlock: [
+    { n: "Eldritch Invocations (pick 2)", d: "Permanent magical gifts from your patron — pick two with your DM (Agonizing Blast, adding your CHA to Eldritch Blast damage, is the classic)." },
+  ],
+  wizard: [
+    { n: "Arcane Tradition", d: "Choose your school of magic with your DM (Evocation, Abjuration...) — it grants a level-2 feature like Sculpt Spells." },
+  ],
+};
+const isCasterNow = (c) => !!casterAbilityOf(c);
 
 // A curated set of SRD spells (cantrips + levels 1-3), tagged by class.
 const SPELLS = [
@@ -325,6 +381,10 @@ const SPELLS = [
   { name: "Hunter's Mark", level: 1, classes: ["ranger"], time: "1 bonus action", comp: "V", effect: "Bonus damage against a marked target." },
   { name: "Hex", level: 1, classes: ["warlock"], time: "1 bonus action", comp: "V, S, M", effect: "Curse a target for bonus damage." },
   { name: "Detect Magic", level: 1, classes: ["bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "wizard"], time: "1 action", comp: "V, S", effect: "Sense magic around you." },
+  { name: "Divine Favor", level: 1, classes: ["paladin"], time: "1 bonus action", comp: "V, S", effect: "Your weapon glows — +1d4 radiant damage on hits." },
+  { name: "Shield of Faith", level: 1, classes: ["paladin"], time: "1 bonus action", comp: "V, S, M", effect: "A shimmering field gives a creature +2 AC." },
+  { name: "Goodberry", level: 1, classes: ["druid", "ranger"], time: "1 action", comp: "V, S, M", effect: "Ten berries; each heals 1 HP and feeds for a day." },
+  { name: "Ensnaring Strike", level: 1, classes: ["ranger"], time: "1 bonus action", comp: "V", effect: "Your next hit wraps the target in thorny vines (restrained)." },
   // Level 2
   { name: "Misty Step", level: 2, classes: ["sorcerer", "warlock", "wizard"], time: "1 bonus action", comp: "V", effect: "Teleport 30 ft as a bonus action." },
   { name: "Scorching Ray", level: 2, classes: ["sorcerer", "wizard"], time: "1 action", comp: "V, S", effect: "Three rays of fire." },
@@ -494,13 +554,26 @@ const getSpeed = (c) => {
   const race = RACES[c.race];
   if (!race) return "—";
   const sr = race.subraces && c.subrace ? race.subraces[c.subrace] : null;
-  return (sr && sr.speed) || race.speed;
+  let speed = (sr && sr.speed) || race.speed;
+  // Monk Unarmored Movement: +10 ft at level 2 while wearing no armor and no shield.
+  if (c.class === "monk" && (c.level || 1) >= 2) {
+    const eq = (c.equipment || []).map((s) => String(s).toLowerCase());
+    const armored = eq.some((i) => ARMOR_DB.some((a) => i.includes(a.key))) || eq.some((s) => s.includes("shield"));
+    if (!armored) speed += 10;
+  }
+  return speed;
 };
 function maxHP(c) {
   const cls = CLASSES[c.class];
   if (!cls) return "—";
+  const lvl = c.level || 1;
   let hp = cls.hd + mod(finalScore(c, "con"));
-  if (c.race === "dwarf" && c.subrace === "hill") hp += 1;
+  if (lvl >= 2) {
+    // hp2 = the amount gained at level 2 (die + CON, min 1). Fall back to the average.
+    const gain = c.hp2 != null ? c.hp2 : Math.max(1, Math.floor(cls.hd / 2) + 1 + mod(finalScore(c, "con")));
+    hp += Math.max(1, gain);
+  }
+  if (c.race === "dwarf" && c.subrace === "hill") hp += lvl;
   return Math.max(1, hp);
 }
 function allProficientSkills(c) {
@@ -515,7 +588,8 @@ function blankChar() {
     baseScores: { str: null, dex: null, con: null, int: null, wis: null, cha: null },
     pool: [...STANDARD_ARRAY], classSkills: [], acOverride: "", notes: "",
     equipment: [], equipmentLoaded: false, weapons: [], spells: [], photo: "",
-    hpCurrent: "", hpTemp: "", slotsUsed: 0, deathS: 0, deathF: 0, racialCantrip: "", dragonAncestry: "", breathUsed: false,
+    hpCurrent: "", hpTemp: "", slotsUsed: 0, deathS: 0, deathF: 0, racialCantrip: "", dragonAncestry: "", breathUsed: false, hp2: null,
+    introPhoto: "", altPhoto: "",
     level: 1, createdAt: Date.now(),
   };
 }
@@ -539,6 +613,43 @@ function migrateChar(stored) {
 }
 
 /* ============================ APP ============================ */
+
+// Four ready-made characters for demoing the Intro and Combat Tracker.
+function seedCharacters() {
+  const mk = (over) => ({ ...blankChar(), ...over, baseScores: { ...blankChar().baseScores, ...(over.baseScores || {}) }, equipmentLoaded: true });
+  return [
+    mk({
+      id: "seed-thorin", name: "Thorin Ironfist", player: "Sam", race: "dwarf", subrace: "mountain",
+      class: "fighter", background: "soldier", alignment: "Lawful Good", scoreMethod: "custom",
+      baseScores: { str: 15, dex: 12, con: 14, int: 10, wis: 13, cha: 8 },
+      classSkills: ["athletics", "perception"], equipment: ["Chain mail", "Longsword", "Shield", "Light crossbow + 20 bolts", "Dungeoneer's pack"],
+      notes: "A gruff veteran who guards the party like family.",
+    }),
+    mk({
+      id: "seed-lyra", name: "Lyra Moonwhisper", player: "Alex", race: "elf", subrace: "high",
+      class: "wizard", background: "sage", alignment: "Neutral Good", scoreMethod: "custom",
+      baseScores: { str: 8, dex: 14, con: 12, int: 15, wis: 13, cha: 10 }, racialCantrip: "Fire Bolt",
+      classSkills: ["arcana", "history"], equipment: ["Quarterstaff", "Dagger", "Spellbook", "Component pouch", "Scholar's pack"],
+      spells: ["Fire Bolt", "Mage Hand", "Light", "Magic Missile", "Shield", "Mage Armor", "Sleep", "Detect Magic", "Burning Hands", "Charm Person"],
+      notes: "Endlessly curious; collects forbidden books.",
+    }),
+    mk({
+      id: "seed-pip", name: "Pip Underbough", player: "Jordan", race: "halfling", subrace: "lightfoot",
+      class: "rogue", background: "criminal", alignment: "Chaotic Good", scoreMethod: "custom",
+      baseScores: { str: 8, dex: 15, con: 13, int: 12, wis: 10, cha: 14 },
+      classSkills: ["acrobatics", "stealth", "sleight", "perception"], equipment: ["Rapier", "Shortbow + 20 arrows", "Leather armor", "Two daggers", "Thieves' tools", "Burglar's pack"],
+      notes: "Light fingers, lighter conscience, heart of gold.",
+    }),
+    mk({
+      id: "seed-brenna", name: "Brenna Emberhorn", player: "Riley", race: "tiefling", subrace: "",
+      class: "cleric", background: "acolyte", alignment: "Lawful Good", scoreMethod: "custom",
+      baseScores: { str: 13, dex: 10, con: 14, int: 10, wis: 15, cha: 12 },
+      classSkills: ["insight", "medicine"], equipment: ["Scale mail", "Mace", "Shield", "Holy symbol", "Priest's pack"],
+      spells: ["Sacred Flame", "Guidance", "Light", "Cure Wounds", "Healing Word", "Bless", "Guiding Bolt"],
+      notes: "Calm, kind, and absolutely will not let you die — despite the horns.",
+    }),
+  ];
+}
 
 export default function App() {
   const [roster, setRoster] = useState([]);
@@ -589,6 +700,8 @@ export default function App() {
   const current = roster.find((c) => c.id === currentId) || null;
   const update = (patch) =>
     setRoster((r) => r.map((c) => (c.id === currentId ? { ...c, ...patch } : c)));
+  const updateById = (id, patch) =>
+    setRoster((r) => r.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 
   const startNew = () => {
     const c = blankChar();
@@ -600,6 +713,11 @@ export default function App() {
   const editChar = (id) => { setCurrentId(id); setStep(0); setView("build"); };
   const viewSheet = (id) => { setCurrentId(id); setView("sheet"); };
   const deleteChar = (id) => setRoster((r) => r.filter((c) => c.id !== id));
+  const seedFour = () => setRoster((r) => {
+    const have = new Set(r.map((c) => c.id));
+    const add = seedCharacters().filter((c) => !have.has(c.id));
+    return [...r, ...add];
+  });
 
   return (
     <>
@@ -623,17 +741,23 @@ export default function App() {
         {!loaded && <div className="loading">Unrolling the scrolls…</div>}
         {loaded && view === "home" && (
           <Home roster={roster} onNew={startNew} onLearn={() => setView("learn")} onCombat={() => setView("combat")}
-            onEdit={editChar} onSheet={viewSheet} onDelete={deleteChar} />
+            onEdit={editChar} onSheet={viewSheet} onDelete={deleteChar}
+            onIntro={() => setView("intro")} onTracker={() => setView("tracker")} onSeed={seedFour} />
         )}
         {loaded && view === "learn" && <Learn onBack={() => setView("home")} onStart={startNew} onCombat={() => setView("combat")} raceImages={raceImages} setRaceImage={setRaceImage} />}
         {loaded && view === "combat" && <CombatPage onBack={() => setView("home")} onStart={startNew} />}
+        {loaded && view === "intro" && <IntroPage roster={roster} updateById={updateById} onBack={() => setView("home")} onSheet={viewSheet} />}
+        {loaded && view === "tracker" && <CombatTracker roster={roster} onBack={() => setView("home")} />}
+        {loaded && view === "levelup" && current && (
+          <LevelUpPanel c={current} update={update} onDone={() => viewSheet(current.id)} />
+        )}
         {loaded && view === "build" && current && (
           <Builder c={current} update={update} step={step} setStep={setStep}
             raceImages={raceImages} setRaceImage={setRaceImage}
             onHome={() => setView("home")} onFinish={() => viewSheet(current.id)} />
         )}
         {loaded && view === "sheet" && current && (
-          <Sheet c={current} update={update} onBack={() => setView("home")} onEdit={() => editChar(current.id)} />
+          <Sheet c={current} update={update} onBack={() => setView("home")} onEdit={() => editChar(current.id)} onLevelUp={() => setView("levelup")} />
         )}
       </div>
     </>
@@ -642,7 +766,7 @@ export default function App() {
 
 /* ============================ HOME / ROSTER ============================ */
 
-function Home({ roster, onNew, onLearn, onCombat, onEdit, onSheet, onDelete }) {
+function Home({ roster, onNew, onLearn, onCombat, onEdit, onSheet, onDelete, onIntro, onTracker, onSeed }) {
   return (
     <div className="page fade-in">
       <div className="hero">
@@ -656,6 +780,11 @@ function Home({ roster, onNew, onLearn, onCombat, onEdit, onSheet, onDelete }) {
           <button className="btn btn-ghost" onClick={onLearn}>📖 Learn the Basics</button>
           <button className="btn btn-ghost" onClick={onCombat}>⚔ How Combat Works</button>
           <button className="btn btn-primary" onClick={onNew}>＋ Create a Character</button>
+        </div>
+        <div className="hero-actions table-tools">
+          <button className="btn btn-ghost" onClick={onIntro} disabled={roster.length === 0}>🎭 Character Intros</button>
+          <button className="btn btn-ghost" onClick={onTracker} disabled={roster.length === 0}>🗡 Combat Tracker</button>
+          {roster.length === 0 && <button className="btn btn-ghost" onClick={onSeed}>✨ Load 4 sample heroes</button>}
         </div>
       </div>
 
@@ -1223,7 +1352,7 @@ function Builder({ c, update, step, setStep, onHome, onFinish, raceImages, setRa
     { key: "background", label: "Background" },
     { key: "skills", label: "Skills" },
     { key: "equipment", label: "Equipment" },
-    ...(isCaster(c.class) ? [{ key: "spells", label: "Spells" }] : []),
+    ...(isCasterNow(c) ? [{ key: "spells", label: "Spells" }] : []),
     { key: "review", label: "Review" },
   ];
   const safeStep = Math.min(step, steps.length - 1);
@@ -1876,18 +2005,20 @@ function WeaponEditor({ c, update }) {
 
 function StepSpells({ c, update, num }) {
   const cls = CLASSES[c.class];
-  if (!isCaster(c.class)) {
+  if (!isCasterNow(c)) {
     return (
       <div className="step">
         <StepHead n={num} title="Spells" sub="" />
         <div className="empty">
-          {cls ? `The ${cls.name} doesn't cast spells at low levels — nothing to pick here.` : "Pick a class first (step 3)."}
+          {cls ? (c.class === "paladin" || c.class === "ranger"
+            ? `${cls.name}s unlock spellcasting at level 2 — level up and come back!`
+            : `The ${cls.name} doesn't cast spells — nothing to pick here.`) : "Pick a class first (step 3)."}
           <div className="tiny-note" style={{ marginTop: 8 }}>Just press <b>Next</b> to continue.</div>
         </div>
       </div>
     );
   }
-  const abilKey = CASTERS[c.class];
+  const abilKey = casterAbilityOf(c);
   const abil = ABILITIES.find((a) => a.key === abilKey);
   const abilMod = mod(finalScore(c, abilKey));
   const saveDC = 8 + PROF_BONUS + abilMod;
@@ -1909,17 +2040,17 @@ function StepSpells({ c, update, num }) {
   return (
     <div className="step">
       <StepHead n={num} title="Choose Spells"
-        sub={`At level 1, a ${cls.name} ${limits.label} ${limits.cantrips} cantrips and ${limits.spells} 1st-level spell${limits.spells > 1 ? "s" : ""}. Cantrips cast freely; 1st-level spells use your ${limits.slots} spell slot${limits.slots > 1 ? "s" : ""}${limits.shortRest ? " (back after a short rest)" : " (back after a long rest)"}.`} />
+        sub={`At level ${c.level || 1}, a ${cls.name} ${limits.label} ${limits.cantrips > 0 ? `${limits.cantrips} cantrips and ` : ""}${limits.spells} 1st-level spell${limits.spells > 1 ? "s" : ""}. ${limits.cantrips > 0 ? "Cantrips cast freely; 1st-level" : "1st-level"} spells use your ${limits.slots} spell slot${limits.slots > 1 ? "s" : ""}${limits.shortRest ? " (back after a short rest)" : " (back after a long rest)"}.`} />
       <div className="spell-meta">
         <div className="sm-block"><span>Casting Ability</span><b>{abil.name}</b></div>
         <div className="sm-block"><span>Spell Save DC</span><b>{saveDC}</b></div>
         <div className="sm-block"><span>Spell Attack</span><b>{fmt(atk)}</b></div>
-        <div className={"sm-block" + (chosenCantrips === limits.cantrips ? " full" : "")}><span>Cantrips</span><b>{chosenCantrips} / {limits.cantrips}</b></div>
+        {limits.cantrips > 0 && <div className={"sm-block" + (chosenCantrips === limits.cantrips ? " full" : "")}><span>Cantrips</span><b>{chosenCantrips} / {limits.cantrips}</b></div>}
         <div className={"sm-block" + (chosenSpells === limits.spells ? " full" : "")}><span>1st-Level</span><b>{chosenSpells} / {limits.spells}</b></div>
       </div>
 
       {[0, 1].map((lvl) => {
-        const list = available.filter((s) => s.level === lvl);
+        const list = lvl === 0 && limits.cantrips === 0 ? [] : available.filter((s) => s.level === lvl);
         if (list.length === 0) return null;
         const atCap = lvl === 0 ? chosenCantrips >= limits.cantrips : chosenSpells >= limits.spells;
         return (
@@ -2000,7 +2131,364 @@ const StepHead = ({ n, title, sub }) => (
 
 /* ============================ CHARACTER SHEET ============================ */
 
-function Sheet({ c, update, onBack, onEdit }) {
+function LevelUpPanel({ c, update, onDone }) {
+  const cls = CLASSES[c.class];
+  const lvl = c.level || 1;
+  const con = cls ? mod(finalScore(c, "con")) : 0;
+  const avg = cls ? Math.max(1, Math.floor(cls.hd / 2) + 1 + con) : 1;
+  const [die, setDie] = useState(null);
+  const [phase, setPhase] = useState("idle"); // idle | rolling | chosen
+  const [gain, setGain] = useState(null);
+  const [method, setMethod] = useState("");
+  const iv = useRef(null);
+  useEffect(() => () => clearInterval(iv.current), []);
+
+  if (!cls) {
+    return (
+      <div className="page fade-in">
+        <button className="back-link" onClick={onDone}>‹ Back</button>
+        <div className="empty">Pick a class in the builder before leveling up.</div>
+      </div>
+    );
+  }
+
+  if (lvl >= 2) {
+    return (
+      <div className="page fade-in">
+        <button className="back-link" onClick={onDone}>‹ Back to sheet</button>
+        <div className="hero compact">
+          <div className="hero-rule">◈ ◈ ◈</div>
+          <h1>✦ Already Level 2</h1>
+          <p className="hero-lead">{c.name || "This hero"} has reached level 2 — their new features are on the sheet. Made a mistake?</p>
+        </div>
+        <div className="center-cta">
+          <button className="btn btn-ghost" onClick={() => { update({ level: 1, hp2: null }); onDone(); }}>↩ Revert to level 1</button>
+        </div>
+      </div>
+    );
+  }
+
+  const rollHP = () => {
+    clearInterval(iv.current);
+    setPhase("rolling"); setMethod("roll");
+    let t = 0;
+    iv.current = setInterval(() => {
+      setDie(1 + Math.floor(Math.random() * cls.hd));
+      if (++t >= 12) {
+        clearInterval(iv.current);
+        const r = 1 + Math.floor(Math.random() * cls.hd);
+        setDie(r);
+        setGain(Math.max(1, r + con));
+        setPhase("chosen");
+      }
+    }, 60);
+  };
+  const takeAvg = () => { clearInterval(iv.current); setDie(null); setMethod("avg"); setGain(avg); setPhase("chosen"); };
+  const confirm = () => { update({ level: 2, hp2: gain }); onDone(); };
+
+  const feats = CLASS_FEATURES_2[c.class] || [];
+  const newCaster = c.class === "paladin" || c.class === "ranger";
+  const limitsNow = spellLimits({ ...c, level: 2 });
+
+  return (
+    <div className="page fade-in">
+      <button className="back-link" onClick={onDone}>‹ Back to sheet</button>
+      <div className="hero compact">
+        <div className="hero-rule">◈ ◈ ◈</div>
+        <h1>⬆ Level 2 — {c.name || "Unnamed Hero"}</h1>
+        <p className="hero-lead">Two things happen when you level: your hit points grow, and your {cls.name} learns new tricks.</p>
+      </div>
+
+      <div className="lu-section">
+        <div className="subhead">1 · Hit Points</div>
+        <p className="tiny-note left">Roll your d{cls.hd} hit die (risky, exciting) or take the safe average — then add your Constitution modifier ({fmt(con)}) either way.</p>
+        <div className="lu-hp-row">
+          <button className={"method" + (method === "roll" ? " on" : "")} disabled={phase === "rolling"} onClick={rollHP}>
+            <b>🎲 Roll 1d{cls.hd}</b><span>{phase === "rolling" ? `rolling… ${die}` : method === "roll" && die != null ? `rolled ${die} ${fmt(con)} → +${gain} HP` : "feeling lucky"}</span>
+          </button>
+          <button className={"method" + (method === "avg" ? " on" : "")} disabled={phase === "rolling"} onClick={takeAvg}>
+            <b>Take Average</b><span>+{avg} HP, guaranteed</span>
+          </button>
+        </div>
+        {gain != null && phase === "chosen" && (
+          <div className="lu-hp-result">Max HP: {maxHP(c)} → <b>{maxHP({ ...c, level: 2, hp2: gain })}</b></div>
+        )}
+      </div>
+
+      <div className="lu-section">
+        <div className="subhead">2 · New {cls.name} Features</div>
+        <div className="cf-list lu-feats">
+          {feats.map((f) => <div className="cf-item" key={f.n}><b>{f.n}.</b> {f.d}</div>)}
+        </div>
+        {newCaster && limitsNow && (
+          <div className="info-box">
+            <div className="info-title">✨ You unlock spellcasting!</div>
+            <ul>
+              <li>After confirming, open <b>✎ Edit → Spells</b> to {limitsNow.label === "prepares" ? "prepare" : "pick"} your {limitsNow.spells} 1st-level spell{limitsNow.spells > 1 ? "s" : ""}.</li>
+              <li>You'll have {limitsNow.slots} spell slots, back after a long rest.</li>
+            </ul>
+          </div>
+        )}
+        {!newCaster && casterAbilityOf({ ...c, level: 2 }) && limitsNow && (
+          <div className="info-box">
+            <div className="info-title">✨ Your magic grows</div>
+            <ul>
+              <li>Spell slots: {spellLimits(c) ? spellLimits(c).slots : "—"} → <b>{limitsNow.slots}</b>{limitsNow.shortRest ? " (short rest)" : ""}.</li>
+              <li>You can now {limitsNow.label === "has in their spellbook" ? "have" : limitsNow.label.replace("prepares", "prepare").replace("knows", "know")} <b>{limitsNow.spells}</b> 1st-level spells — visit <b>✎ Edit → Spells</b> to add new picks.</li>
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="center-cta">
+        <button className="btn btn-primary" disabled={gain == null} onClick={confirm}>
+          {gain == null ? "Choose your hit points first" : `✦ Confirm — become Level 2 (+${gain} HP)`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function IntroPage({ roster, updateById, onBack, onSheet }) {
+  const [sel, setSel] = useState(roster[0] ? roster[0].id : null);
+  const [form, setForm] = useState("base"); // tiefling: base | fiend
+  const [unlocked, setUnlocked] = useState(false); // morph stays locked until the DM enters the password once
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState("");
+  const [pwErr, setPwErr] = useState(false);
+  const c = roster.find((x) => x.id === sel) || roster[0];
+  if (!c) return null;
+  const race = RACES[c.race];
+  const cls = CLASSES[c.class];
+  const sub = race && race.subraces && c.subrace ? race.subraces[c.subrace].name + " " : "";
+  const ac = c.acOverride !== "" && c.acOverride != null ? Number(c.acOverride) : deriveAC(c).ac;
+  const isTiefling = c.race === "tiefling";
+
+  // The morph is locked until the DM enters the secret word once (per session).
+  const submitPw = () => {
+    if (pw.trim().toLowerCase() === "thiefswap") {
+      setUnlocked(true); setPwOpen(false); setPw(""); setPwErr(false);
+    } else {
+      setPwErr(true);
+    }
+  };
+
+  // which image to show: tiefling fiendish form uses altPhoto; otherwise the intro image (falling back to sheet photo)
+  const showingFiend = isTiefling && form === "fiend";
+  const activeImg = showingFiend ? (c.altPhoto || c.photo || c.introPhoto) : (c.introPhoto || c.photo);
+
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    const field = showingFiend ? "altPhoto" : "introPhoto";
+    r.onload = () => updateById(c.id, { [field]: r.result });
+    r.readAsDataURL(f);
+    e.target.value = "";
+  };
+  const clearImg = () => updateById(c.id, showingFiend ? { altPhoto: "" } : { introPhoto: "" });
+
+  return (
+    <div className="page fade-in intro-page">
+      <button className="back-link no-print" onClick={onBack}>‹ Party</button>
+      <div className="intro-stage">
+        <div className="intro-portrait-wrap">
+          <div
+            className={"intro-portrait" + (activeImg ? " has" : "") + (showingFiend ? " fiend" : "") + (isTiefling && unlocked ? " morphable" : "")}
+            onClick={isTiefling && unlocked ? () => setForm((f) => (f === "fiend" ? "base" : "fiend")) : undefined}
+          >
+            {activeImg ? <img src={activeImg} alt="" /> : <RacePortrait kind={c.race} />}
+            <input id="intro-file-input" type="file" accept="image/*" hidden onChange={onFile} />
+            {!isTiefling && (
+              <>
+                <label htmlFor="intro-file-input" className="corner-add no-print" title="Upload intro image"
+                  onClick={(e) => e.stopPropagation()}>＋</label>
+                {c.introPhoto && (
+                  <button className="corner-clear no-print" title="Remove this image"
+                    onClick={(e) => { e.stopPropagation(); clearImg(); }}>✕</button>
+                )}
+              </>
+            )}
+          </div>
+
+          {isTiefling && (
+            <div className="dm-row no-print">
+              {unlocked ? (
+                <>
+                  <button className="img-btn" onClick={() => setForm((f) => (f === "fiend" ? "base" : "fiend"))}>
+                    {showingFiend ? "😊 Change to human" : "😈 Change to morph"}
+                  </button>
+                  <label htmlFor="intro-file-input" className="img-btn">
+                    ⬆ Upload {showingFiend ? "morph" : "human"} image
+                  </label>
+                  {(showingFiend ? c.altPhoto : c.introPhoto) && (
+                    <button className="img-btn clear" onClick={clearImg}>✕ Remove</button>
+                  )}
+                </>
+              ) : pwOpen ? (
+                <div className="pw-box">
+                  <input
+                    className="pw-input" type="password" autoFocus value={pw} placeholder="DM password"
+                    onChange={(e) => { setPw(e.target.value); setPwErr(false); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") submitPw(); if (e.key === "Escape") { setPwOpen(false); setPw(""); setPwErr(false); } }}
+                  />
+                  <button className="img-btn" onClick={submitPw}>Unlock</button>
+                  <button className="img-btn ghost-x" onClick={() => { setPwOpen(false); setPw(""); setPwErr(false); }}>✕</button>
+                  {pwErr && <span className="pw-err">Incorrect</span>}
+                </div>
+              ) : (
+                <button className="img-btn dm-btn" onClick={() => { setPwOpen(true); setPwErr(false); }}>🛡 DM</button>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="intro-info">
+          <div className="intro-eyebrow">{c.player ? `played by ${c.player}` : "an adventurer"}</div>
+          <h1 className="intro-name">{c.name || "Unnamed Hero"}</h1>
+          <div className="intro-sub">{sub}{race ? race.name : "—"} · {cls ? cls.name : "—"} · Level {c.level || 1}{c.alignment ? " · " + c.alignment : ""}</div>
+          <div className="intro-vitals">
+            <div className="iv"><span>HP</span><b>{cls ? maxHP(c) : "—"}</b></div>
+            <div className="iv"><span>AC</span><b>{ac}</b></div>
+            <div className="iv"><span>Speed</span><b>{getSpeed(c)} ft</b></div>
+          </div>
+          <div className="intro-abil">
+            {ABILITIES.map((a) => {
+              const t = finalScore(c, a.key);
+              return (
+                <div className="ia" key={a.key}>
+                  <span className="ia-name">{a.short}</span>
+                  <span className="ia-score">{t || "—"}</span>
+                  <span className="ia-mod">{t ? fmt(mod(t)) : ""}</span>
+                </div>
+              );
+            })}
+          </div>
+          {c.notes && <p className="intro-notes">“{c.notes}”</p>}
+          <button className="btn btn-ghost small no-print" onClick={() => onSheet(c.id)}>View full sheet ›</button>
+        </div>
+      </div>
+
+      <div className="intro-picker no-print">
+        <div className="intro-picker-label">Tap a hero to spotlight them:</div>
+        <div className="intro-thumbs">
+          {roster.map((x) => (
+            <button key={x.id} className={"intro-thumb" + (x.id === sel ? " on" : "")} onClick={() => { setSel(x.id); setForm("base"); setUnlocked(false); setPwOpen(false); setPw(""); setPwErr(false); }}>
+              <span className={"it-pic" + ((x.introPhoto || x.photo) ? " has" : "")}>
+                {(x.introPhoto || x.photo) ? <img src={x.introPhoto || x.photo} alt="" /> : <RacePortrait kind={x.race} />}
+              </span>
+              <span className="it-name">{x.name || "Unnamed"}</span>
+              <span className="it-sub">{CLASSES[x.class] ? CLASSES[x.class].name : ""}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CombatTracker({ roster, onBack }) {
+  // Each entry: { id, name, init, isMonster, hp, maxHp }
+  const buildFromParty = () => roster.map((c) => ({
+    id: c.id, name: c.name || "Unnamed Hero", photo: c.photo, race: c.race,
+    init: "", isMonster: false, hp: CLASSES[c.class] ? maxHP(c) : 10, maxHp: CLASSES[c.class] ? maxHP(c) : 10,
+  }));
+  const [entries, setEntries] = useState(buildFromParty);
+  const [started, setStarted] = useState(false);
+  const [turn, setTurn] = useState(0);
+  const [round, setRound] = useState(1);
+  const [mName, setMName] = useState("");
+
+  const order = started
+    ? [...entries].sort((a, b) => (Number(b.init) || 0) - (Number(a.init) || 0))
+    : entries;
+
+  const setInit = (id, v) => setEntries((e) => e.map((x) => (x.id === id ? { ...x, init: v } : x)));
+  const addMonster = () => {
+    const n = mName.trim() || "Monster";
+    setEntries((e) => [...e, { id: uid(), name: n, isMonster: true, init: "", hp: 10, maxHp: 10 }]);
+    setMName("");
+  };
+  const removeEntry = (id) => setEntries((e) => e.filter((x) => x.id !== id));
+  const bumpHP = (id, d) => setEntries((e) => e.map((x) => (x.id === id ? { ...x, hp: Math.max(0, (Number(x.hp) || 0) + d) } : x)));
+
+  const start = () => { setStarted(true); setTurn(0); setRound(1); };
+  const next = () => {
+    setTurn((t) => {
+      const nt = t + 1;
+      if (nt >= order.length) { setRound((r) => r + 1); return 0; }
+      return nt;
+    });
+  };
+  const reset = () => { setStarted(false); setTurn(0); setRound(1); setEntries(buildFromParty()); };
+
+  const activeId = started && order[turn] ? order[turn].id : null;
+  const onDeckId = started && order.length > 1 ? order[(turn + 1) % order.length].id : null;
+
+  return (
+    <div className="page fade-in tracker-page">
+      <div className="tracker-top no-print">
+        <button className="back-link" onClick={onBack}>‹ Party</button>
+        <div className="tracker-controls">
+          {!started ? (
+            <button className="btn btn-primary small" onClick={start}>▶ Start Combat</button>
+          ) : (
+            <>
+              <span className="round-pill">Round {round}</span>
+              <button className="btn btn-primary small" onClick={next}>Next turn ›</button>
+              <button className="btn btn-ghost small" onClick={reset}>↺ Reset</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="hero compact">
+        <h1>🗡 Combat Tracker</h1>
+        {!started
+          ? <p className="hero-lead">Set everyone's initiative (roll a d20 + DEX), add any monsters, then press Start Combat.</p>
+          : <p className="hero-lead">It's <b>{order[turn] ? order[turn].name : "—"}</b>'s turn. Press “Next turn” when they finish.</p>}
+      </div>
+
+      {!started && (
+        <div className="monster-add no-print">
+          <input value={mName} placeholder="Add a monster (e.g. Goblin)" onChange={(e) => setMName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addMonster(); }} />
+          <button className="btn btn-ghost small" onClick={addMonster}>＋ Add monster</button>
+        </div>
+      )}
+
+      <div className="track-list">
+        {order.map((x, i) => {
+          const active = x.id === activeId;
+          const onDeck = x.id === onDeckId;
+          return (
+            <div className={"track-card" + (active ? " active" : "") + (onDeck ? " ondeck" : "") + (x.isMonster ? " monster" : "")} key={x.id}>
+              <div className="tc-order">{started ? i + 1 : "•"}</div>
+              <div className={"tc-pic" + (x.photo ? " has" : "")}>
+                {x.photo ? <img src={x.photo} alt="" /> : x.isMonster ? <span className="tc-monster">👹</span> : <RacePortrait kind={x.race} />}
+              </div>
+              <div className="tc-main">
+                <div className="tc-name">{x.name}{active && <span className="tc-flag now">NOW</span>}{onDeck && <span className="tc-flag next">NEXT</span>}</div>
+                <div className="tc-hp">
+                  <button className="hpb minus no-print" onClick={() => bumpHP(x.id, -1)}>−</button>
+                  <span className="tc-hp-val">HP {x.hp}{x.maxHp ? ` / ${x.maxHp}` : ""}</span>
+                  <button className="hpb plus no-print" onClick={() => bumpHP(x.id, +1)}>＋</button>
+                  {x.hp === 0 && <span className="tc-down">DOWN</span>}
+                </div>
+              </div>
+              {!started && (
+                <input className="tc-init" value={x.init} placeholder="init" inputMode="numeric"
+                  onChange={(e) => setInit(x.id, e.target.value)} />
+              )}
+              {!started && x.isMonster && <button className="equip-x no-print" onClick={() => removeEntry(x.id)}>✕</button>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Sheet({ c, update, onBack, onEdit, onLevelUp }) {
   const race = RACES[c.race];
   const cls = CLASSES[c.class];
   const bg = BACKGROUNDS[c.background];
@@ -2012,7 +2500,7 @@ function Sheet({ c, update, onBack, onEdit }) {
   const prof = allProficientSkills(c);
   const perceptionMod = mod(finalScore(c, "wis")) + (prof.has("perception") ? PROF_BONUS : 0);
   const weapons = [...deriveWeapons(c), ...(c.weapons || [])];
-  const casterAbilKey = CASTERS[c.class];
+  const casterAbilKey = casterAbilityOf(c);
   const casterAbil = casterAbilKey ? ABILITIES.find((a) => a.key === casterAbilKey) : null;
   const spellMod = casterAbilKey ? mod(finalScore(c, casterAbilKey)) : 0;
   const spellDC = 8 + PROF_BONUS + spellMod;
@@ -2037,6 +2525,7 @@ function Sheet({ c, update, onBack, onEdit }) {
         <button className="back-link" onClick={onBack}>‹ Party</button>
         <div className="toolbar-right">
           <button className="btn btn-ghost small" onClick={onEdit}>✎ Edit</button>
+          <button className="btn btn-ghost small" onClick={onLevelUp}>{(c.level || 1) >= 2 ? "✦ Lvl 2" : "⬆ Level Up"}</button>
           <button className="btn btn-primary small" onClick={() => window.print()}>🖨 Print</button>
         </div>
       </div>
@@ -2094,7 +2583,7 @@ function Sheet({ c, update, onBack, onEdit }) {
             </div>
             <div className="combat-row">
               <Stat label="Hit Points" value={cls ? maxHP(c) : "—"} big />
-              <Stat label="Hit Dice" value={cls ? `1d${cls.hd}` : "—"} />
+              <Stat label="Hit Dice" value={cls ? `${c.level || 1}d${cls.hd}` : "—"} />
               <Stat label="Prof. Bonus" value={fmt(PROF_BONUS)} />
             </div>
 
@@ -2301,6 +2790,14 @@ function Sheet({ c, update, onBack, onEdit }) {
               <div className="cf-list">
                 <div className="cf-title">{cls.name} — Level 1 Features</div>
                 {CLASS_FEATURES[c.class].map((f) => (
+                  <div className="cf-item" key={f.n}><b>{f.n}.</b> {f.d}</div>
+                ))}
+              </div>
+            )}
+            {cls && (c.level || 1) >= 2 && CLASS_FEATURES_2[c.class] && (
+              <div className="cf-list">
+                <div className="cf-title">{cls.name} — Level 2 Features</div>
+                {CLASS_FEATURES_2[c.class].map((f) => (
                   <div className="cf-item" key={f.n}><b>{f.n}.</b> {f.d}</div>
                 ))}
               </div>
@@ -2874,6 +3371,102 @@ input:focus, select:focus { outline:none; border-color:var(--oxblood); box-shado
 .cf-item { font-size:12.5px; color:var(--ink-soft); line-height:1.4; margin-bottom:5px; }
 .cf-item b { color:var(--ink); font-family:'Cinzel',serif; font-size:12px; }
 .breath-pip { vertical-align:middle; margin-left:6px; }
+
+/* level up */
+.lu-section { max-width:620px; margin:0 auto 22px; padding:18px 22px; border-radius:12px;
+  border:1px solid rgba(154,117,21,.4);
+  background:linear-gradient(180deg, rgba(255,251,240,.7), rgba(244,230,201,.5)); }
+.lu-hp-row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+.lu-hp-row .method { min-width:190px; }
+.lu-hp-result { text-align:center; margin-top:12px; font-size:17px; color:var(--ink-soft); }
+.lu-hp-result b { font-family:'Cinzel',serif; font-size:22px; color:var(--green); }
+.lu-feats { border-top:none; padding-top:0; margin-top:4px; }
+
+/* table tools row */
+.table-tools { margin-top:12px; }
+
+/* intro spotlight */
+.intro-stage { display:flex; gap:32px; align-items:center; justify-content:center; flex-wrap:wrap; margin:10px 0 26px; }
+.intro-portrait-wrap { flex:none; }
+.intro-portrait { position:relative; }
+.intro-portrait.morphable { cursor:default; }
+.intro-portrait.fiend { border-color:var(--oxblood); box-shadow:0 10px 30px rgba(122,31,31,.4), 0 0 0 1px var(--oxblood) inset; }
+.corner-add, .corner-clear { position:absolute; top:8px; width:34px; height:34px; border-radius:50%;
+  border:2px solid var(--gold); background:rgba(255,251,240,.92); color:var(--oxblood); font-size:20px; line-height:1;
+  cursor:pointer; display:grid; place-items:center; box-shadow:0 2px 8px rgba(90,60,20,.3); z-index:2; transition:.15s; }
+.corner-add { right:8px; }
+.corner-clear { right:48px; font-size:15px; }
+.corner-add:hover, .corner-clear:hover { background:#fff; transform:scale(1.08); }
+.dm-row { display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin-top:12px; }
+.dm-btn { opacity:.55; }
+.dm-btn:hover { opacity:1; }
+.dm-row .img-btn { cursor:pointer; }
+.pw-box { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:center; }
+.pw-input { width:150px; padding:8px 10px; font-size:14px; }
+.ghost-x { padding:8px 10px; }
+.pw-err { color:var(--oxblood); font-size:13px; font-style:italic; }
+.intro-portrait { width:240px; height:240px; border-radius:20px; overflow:hidden; padding:14px;
+  background:radial-gradient(circle at 42% 30%, #fff, var(--parch) 65%, var(--parch-deep));
+  border:3px solid var(--gold); box-shadow:0 10px 30px rgba(90,60,20,.28); display:grid; place-items:center; }
+.intro-portrait.has { padding:0; }
+.intro-portrait img { width:100%; height:100%; object-fit:cover; }
+.intro-portrait .race-portrait-art { width:100%; height:100%; }
+.intro-info { flex:1; min-width:280px; max-width:460px; }
+.intro-eyebrow { font-family:'EB Garamond',serif; font-style:italic; color:var(--ink-soft); font-size:16px; }
+.intro-name { font-family:'Cinzel',serif; font-size:46px; color:var(--oxblood); margin:2px 0 6px; line-height:1.05; }
+.intro-sub { font-size:17px; color:var(--ink-soft); margin-bottom:16px; }
+.intro-vitals { display:flex; gap:12px; margin-bottom:16px; }
+.iv { flex:1; text-align:center; padding:10px; border-radius:10px; background:rgba(255,251,240,.7); border:1px solid rgba(154,117,21,.4); }
+.iv span { display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); }
+.iv b { font-family:'Cinzel',serif; font-size:26px; color:var(--oxblood); }
+.intro-abil { display:flex; gap:8px; flex-wrap:wrap; }
+.ia { flex:1; min-width:60px; text-align:center; padding:6px; border-radius:8px; background:rgba(122,31,31,.06); border:1px solid rgba(122,31,31,.2); }
+.ia-name { display:block; font-size:11px; letter-spacing:.08em; color:var(--ink-soft); }
+.ia-score { font-family:'Cinzel',serif; font-size:20px; color:var(--ink); }
+.ia-mod { display:block; font-size:12px; color:var(--green); font-weight:600; }
+.intro-notes { font-style:italic; color:var(--ink-soft); font-size:17px; margin:16px 0; border-left:3px solid var(--gold); padding-left:12px; }
+.intro-picker-label { text-align:center; font-family:'Cinzel',serif; color:var(--oxblood); margin-bottom:12px; }
+.intro-thumbs { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+.intro-thumb { cursor:pointer; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px; border-radius:12px; opacity:.7; transition:.15s; }
+.intro-thumb.on { opacity:1; background:rgba(255,247,230,.8); box-shadow:0 0 0 2px var(--oxblood); }
+.intro-thumb:hover { opacity:1; }
+.it-pic { width:64px; height:64px; border-radius:50%; overflow:hidden; border:2px solid var(--gold); padding:5px; display:grid; place-items:center;
+  background:radial-gradient(circle at 40% 30%, #fff, var(--parch) 70%); }
+.it-pic.has { padding:0; }
+.it-pic img { width:100%; height:100%; object-fit:cover; }
+.it-name { font-family:'Cinzel',serif; font-size:13px; color:var(--ink); }
+.it-sub { font-size:11px; color:var(--ink-soft); }
+
+/* combat tracker */
+.tracker-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.tracker-controls { display:flex; gap:10px; align-items:center; }
+.round-pill { font-family:'Cinzel',serif; font-size:14px; color:#f7ecd2; background:var(--oxblood); padding:6px 14px; border-radius:20px; }
+.monster-add { display:flex; gap:10px; justify-content:center; max-width:420px; margin:0 auto 18px; }
+.monster-add input { flex:1; }
+.track-list { display:flex; flex-direction:column; gap:10px; max-width:680px; margin:0 auto; }
+.track-card { display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:12px;
+  border:1px solid rgba(154,117,21,.4); background:rgba(255,251,240,.65); transition:.18s; }
+.track-card.monster { background:rgba(63,90,53,.1); }
+.track-card.active { border-color:var(--oxblood); box-shadow:0 0 0 3px rgba(122,31,31,.25), 0 6px 18px rgba(122,31,31,.2);
+  background:linear-gradient(180deg, rgba(255,247,230,.95), rgba(244,225,196,.8)); transform:scale(1.02); }
+.track-card.ondeck { border-color:var(--gold-2); }
+.tc-order { flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+  font-family:'Cinzel',serif; background:var(--ink); color:var(--parch); font-size:14px; }
+.track-card.active .tc-order { background:var(--oxblood); }
+.tc-pic { flex:none; width:52px; height:52px; border-radius:50%; overflow:hidden; border:2px solid var(--gold);
+  display:grid; place-items:center; padding:4px; background:radial-gradient(circle at 40% 30%, #fff, var(--parch) 70%); }
+.tc-pic.has { padding:0; } .tc-pic img { width:100%; height:100%; object-fit:cover; }
+.tc-monster { font-size:26px; }
+.tc-main { flex:1; }
+.tc-name { font-family:'Cinzel',serif; font-size:18px; color:var(--ink); display:flex; align-items:center; gap:8px; }
+.tc-flag { font-family:'EB Garamond',serif; font-size:11px; letter-spacing:.08em; padding:2px 8px; border-radius:10px; }
+.tc-flag.now { background:var(--oxblood); color:#f7ecd2; }
+.tc-flag.next { background:rgba(154,117,21,.2); color:var(--ink); border:1px solid var(--gold); }
+.tc-hp { display:flex; align-items:center; gap:8px; margin-top:3px; }
+.tc-hp-val { font-size:14px; color:var(--ink-soft); }
+.hpb { width:24px; height:24px; border-radius:50%; border:1px solid var(--oxblood); background:rgba(255,255,255,.6); color:var(--oxblood); cursor:pointer; font-size:14px; line-height:1; }
+.tc-down { font-family:'Cinzel',serif; font-size:11px; color:#f7ecd2; background:var(--oxblood); padding:2px 8px; border-radius:10px; }
+.tc-init { width:60px; text-align:center; font-family:'Cinzel',serif; font-size:18px; }
 
 /* combat lesson */
 .combat-head { margin-top:40px; }
